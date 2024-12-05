@@ -7,7 +7,7 @@ Welcome to ragsearch's Documentation!
 
    source/modules
 
-.. include:: ../README.md
+.. include:: ../README.rst
 
 
 

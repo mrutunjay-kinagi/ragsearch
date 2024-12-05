@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAGSearch AI</title>
+    <style>
+        body {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace;
+            background-color: #fffbe6;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .container {
+            text-align: center;
+            max-width: 800px;
+            padding: 20px;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        .title {
+            font-size: 36px;
+            color: #333;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            font-size: 18px;
+            color: #666;
+            margin-bottom: 20px;
+        }
+
+        .query-box {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .input-field {
+            width: 80%;
+            padding: 10px;
+            font-size: 16px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            margin-right: 10px;
+        }
+
+        .submit-btn {
+            padding: 10px 20px;
+            font-size: 16px;
+            color: white;
+            background-color: #ffbe0b;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .submit-btn:hover {
+            background-color: #fb8500;
+        }
+
+        .results {
+            margin-top: 20px;
+            font-size: 16px;
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="title">RAGSearch AI</div>
+        <div class="subtitle">Transform your natural language queries into actionable insights</div>
+        <div class="query-box">
+            <input
+                id="queryInput"
+                class="input-field"
+                type="text"
+                placeholder="Ask your question..."
+            />
+            <button id="submitBtn" class="submit-btn">Search</button>
+        </div>
+        <div id="results" class="results"></div>
+    </div>
+    <script>
+        document.getElementById('submitBtn').addEventListener('click', async () => {
+            const query = document.getElementById('queryInput').value;
+            const resultsDiv = document.getElementById('results');
+
+            if (query.trim()) {
+                resultsDiv.innerHTML = "Processing your query...";
+                // Simulate an API call to fetch results
+                try {
+                    const response = await fetch('/query', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ query })
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        resultsDiv.innerHTML = `
+                            <h3>Results:</h3>
+                            <ul>
+                                ${data.results.map(res => `<li>${res}</li>`).join('')}
+                            </ul>
+                        `;
+                    } else {
+                        resultsDiv.innerHTML = "Error fetching results.";
+                    }
+                } catch (error) {
+                    resultsDiv.innerHTML = "Network error. Please try again later.";
+                }
+            } else {
+                resultsDiv.innerHTML = "Please enter a query.";
+            }
+        });
+    </script>
+</body>
+</html>

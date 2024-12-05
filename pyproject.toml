@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "ragsearch"
-version = "0.1.0"
-description = "ragsearch is a Python library for Retrieval-Augmented Generation (RAG), enabling configurable querying of both structured databases and unstructured data for tasks like recommendations and content generation."
+version = "0.1.1"
+description = "is a Python library designed for building a Retrieval-Augmented Generation (RAG) application that enables natural language querying over structured data. This tool leverages embedding models and a vector database (FAISS) to provide an efficient and scalable search engine."
 authors = ["Mrutunjay Kinagi < mrutunjay.kinagi @ gmail.com >"]
 license = "MIT"
 readme = "README.md"
@@ -12,20 +12,14 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "^3.9"
-langchain = "*"
 pytest = "^8.3.3"
 sphinx = "7.4.7"
 sphinx-rtd-theme = "^3.0.2"
-duckdb = "*"
 pylint = "^3.3.1"
-llama-index = "*"
-langchain-community = "^0.3.8"
-pymongo = "^4.10.1"
-unstructured= "*"
-pdfminer-six = "^20240706"
-opencv-python = "^4.10.0.84"
-pinecone = "^5.4.1"
 flask = "^3.1.0"
+cohere = "^5.13.3"
+faiss-cpu = "^1.9.0.post1"
+pandas = "^2.2.3"
 
 
 [build-system]
