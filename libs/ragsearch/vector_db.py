@@ -1,5 +1,6 @@
 """
-This module contains the VectorDB class which is responsible for managing the FAISS index and associated metadata.
+This module contains the VectorDB class which is responsible for
+managing the FAISS index and associated metadata.
 """
 import faiss
 import numpy as np

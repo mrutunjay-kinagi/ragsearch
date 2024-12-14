@@ -11,8 +11,8 @@
             margin: 0;
             padding: 0;
             display: flex;
-            justify-content: center;
-            align-items: flex-start;
+            flex-direction: column;
+            justify-content: space-between;
             min-height: 100vh;
         }
 
@@ -38,6 +38,16 @@
             font-size: 18px;
             color: #7f8c8d;
             margin-bottom: 30px;
+        }
+
+        .data-info {
+            text-align: left;
+            background-color: #fafafa;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
         }
 
         .query-box {
@@ -112,12 +122,32 @@
             color: red;
             font-weight: 600;
         }
+
+        header, footer {
+            background-color: #2c3e50;
+            color: white;
+            padding: 10px 0;
+            text-align: center;
+        }
+
+        footer {
+            margin-top: auto;
+        }
     </style>
 </head>
 <body>
+    <header>
+        <h1>ragsearch</h1>
+    </header>
     <div class="container">
-        <div class="title">RAGSearch AI</div>
         <div class="subtitle">Transform your natural language queries into actionable insights</div>
+
+        <!-- Data Info Section -->
+        <div id="dataInfo" class="data-info">
+            <h3>Data Info</h3>
+            <p>Loading dataset information...</p>
+        </div>
+
         <div class="query-box">
             <input
                 id="queryInput"
@@ -129,7 +159,31 @@
         </div>
         <div id="results" class="results"></div>
     </div>
+    <footer>
+        <p>&copy; 2024 ragsearch. All rights reserved.</p>
+    </footer>
     <script>
+    // Fetch Data Info on page load
+    async function fetchDataInfo() {
+        const dataInfoDiv = document.getElementById('dataInfo');
+        try {
+            const response = await fetch('/data-info'); // Endpoint to fetch data info
+            if (response.ok) {
+                const data = await response.json();
+                dataInfoDiv.innerHTML = `
+                    <h3>Data Info</h3>
+                    <p><strong>Dataset Name:</strong> ${data.file_name}</p>
+                    <p><strong>Number of Records:</strong> ${data.num_records}</p>
+                    <p><strong>Columns:</strong> ${data.columns.join(', ')}</p>
+                `;
+            } else {
+                dataInfoDiv.innerHTML = "<p class='error'>Failed to load dataset information.</p>";
+            }
+        } catch (error) {
+            dataInfoDiv.innerHTML = "<p class='error'>Network error. Unable to fetch dataset info.</p>";
+        }
+    }
+
     document.getElementById('submitBtn').addEventListener('click', search);
     document.getElementById('queryInput').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') search();
@@ -155,12 +209,7 @@
                             <h3>Results:</h3>
                             ${data.results.map(result => `
                                 <div class="result-item">
-                                    <p><strong>Name:</strong> ${result.name}</p>
-                                    <p><strong>Description:</strong> ${result.description}</p>
-                                    <p><strong>Category:</strong> ${result.category}</p>
-                                    <p><strong>Calories:</strong> ${result.calories}</p>
-                                    <p><strong>Difficulty:</strong> ${result.difficulty}</p>
-                                    <p><strong>Similarity Score:</strong> ${result.Score.toFixed(2)}</p>
+                                    <pre>${JSON.stringify(result, null, 2)}</pre>
                                 </div>
                             `).join('')}
                         `;
@@ -177,6 +226,9 @@
             resultsDiv.innerHTML = "<p class='error'>Please enter a query.</p>";
         }
     }
+
+    // Call fetchDataInfo when the page loads
+    window.onload = fetchDataInfo;
     </script>
 </body>
 </html>
