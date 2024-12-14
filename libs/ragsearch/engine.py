@@ -7,12 +7,13 @@ from typing import List, Dict
 import pandas as pd
 from cohere import Client as CohereClient
 from .utils import (extract_textual_columns,
-                    preprocess_text,
+                    preprocess_search_text,
                     dataframe_to_text,
                     batch_generate_embeddings,
                     insert_embeddings_to_vector_db,
                     search_vector_db,
-                    log_data_summary)
+                    log_data_summary,
+                    prepare_embeddings)
 from .vector_db import VectorDB
 from flask import Flask, request, jsonify, render_template
 import threading
@@ -45,11 +46,11 @@ class RagSearchEngine:
 
         # Extract textual columns and preprocess text
         textual_columns = extract_textual_columns(data)
-        preprocessed_texts = dataframe_to_text(data, textual_columns)
+        prepared_data = prepare_embeddings(data, textual_columns, self.embedding_model)
 
-        # Generate and store embeddings
-        embeddings = batch_generate_embeddings(self.embedding_model, preprocessed_texts)
-        insert_embeddings_to_vector_db(self.vector_db, embeddings, metadata=data.to_dict(orient='records'))
+        # Extract Metadata
+        metadata_columns = data.select_dtypes(exclude=['object']).columns.to_list()
+        insert_embeddings_to_vector_db(self.vector_db, prepared_data, metadata_columns)
 
         logging.info("RAG Search Engine initialized successfully.")
 
@@ -60,15 +61,39 @@ class RagSearchEngine:
         Args:
             query (str): The search query.
             top_k (int): The number of top results to return.
-        Returns:
-            List[Dict]: A list of dictionaries containing the search results.
-        """
-        logging.info(f"Processing search query: '{query}'")
-        query_embedding = self.embedding_model.embed(texts=[preprocess_text(query)]).embeddings[0]
-        results = search_vector_db(self.vector_db, query_embedding, top_k=top_k)
 
-        logging.info(f"Found {len(results)} results for the query.")
-        return results
+        Returns:
+            List[Dict]: A list of dictionaries containing metadata (excluding embeddings) and similarity scores for each result.
+        """
+        try:
+            logging.info(f"Processing search query: '{query}'")
+
+            # Generate the query embedding
+            query_embedding = self.embedding_model.embed(texts=[preprocess_search_text(query)]).embeddings[0]
+
+            # Search the vector database
+            results = search_vector_db(self.vector_db, query_embedding, top_k=top_k)
+            logging.info(f"Search completed. Found {len(results)} results.")
+
+            # Map indices to metadata and include similarity scores, excluding 'embedding'
+            enriched_results = []
+            for result in results:
+                index = result["index"]
+                metadata = self.data.iloc[index].to_dict()
+
+                # Remove the embedding from metadata if it exists
+                if "embedding" in metadata:
+                    del metadata["embedding"]
+
+                enriched_results.append({
+                    "metadata": metadata
+                })
+
+            logging.info(f"Found {len(enriched_results)} results for the query.")
+            return enriched_results
+        except Exception as e:
+            logging.error(f"Search failed: {e}")
+            raise
 
     def run(self):
         """
@@ -97,4 +122,4 @@ class RagSearchEngine:
             return jsonify({"results": [res['metadata'] for res in results]})
 
         # Run the Flask app on a separate thread
-        threading.Thread(target=app.run, kwargs={"host": "0.0.0.0", "port": 5000, "use_reloader": False}).start()
+        threading.Thread(target=app.run, kwargs={"host": "0.0.0.0", "port": 8080, "use_reloader": False}).start()

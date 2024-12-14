@@ -6,36 +6,38 @@
     <title>RAGSearch AI</title>
     <style>
         body {
-            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace;
-            background-color: #fffbe6;
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(to bottom, #ffefba, #ffffff);
             margin: 0;
             padding: 0;
             display: flex;
             justify-content: center;
-            align-items: center;
-            height: 100vh;
+            align-items: flex-start;
+            min-height: 100vh;
         }
 
         .container {
             text-align: center;
-            max-width: 800px;
-            padding: 20px;
-            background-color: white;
-            border-radius: 10px;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+            max-width: 900px;
+            width: 100%;
+            margin: 30px auto;
+            padding: 25px;
+            background-color: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.2);
         }
 
         .title {
-            font-size: 36px;
-            color: #333;
-            font-weight: bold;
-            margin-bottom: 10px;
+            font-size: 40px;
+            color: #2c3e50;
+            font-weight: 700;
+            margin-bottom: 8px;
         }
 
         .subtitle {
             font-size: 18px;
-            color: #666;
-            margin-bottom: 20px;
+            color: #7f8c8d;
+            margin-bottom: 30px;
         }
 
         .query-box {
@@ -43,36 +45,72 @@
             justify-content: center;
             align-items: center;
             margin-bottom: 20px;
+            flex-wrap: wrap;
         }
 
         .input-field {
-            width: 80%;
-            padding: 10px;
+            flex: 1;
+            min-width: 300px;
+            padding: 12px;
             font-size: 16px;
             border: 2px solid #ddd;
             border-radius: 8px;
             margin-right: 10px;
+            outline: none;
+            transition: border-color 0.3s ease;
+        }
+
+        .input-field:focus {
+            border-color: #ffb347;
+            box-shadow: 0 0 8px rgba(255, 179, 71, 0.5);
         }
 
         .submit-btn {
-            padding: 10px 20px;
+            padding: 12px 20px;
             font-size: 16px;
             color: white;
-            background-color: #ffbe0b;
+            background-color: #ffb347;
             border: none;
             border-radius: 8px;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: background-color 0.3s ease, transform 0.2s ease;
         }
 
         .submit-btn:hover {
             background-color: #fb8500;
+            transform: translateY(-2px);
         }
 
         .results {
-            margin-top: 20px;
+            margin-top: 30px;
             font-size: 16px;
             text-align: left;
+            border-top: 2px solid #ddd;
+            padding-top: 20px;
+        }
+
+        .result-item {
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #fafafa;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .result-item:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .result-item strong {
+            color: #333;
+        }
+
+        .error {
+            color: red;
+            font-weight: 600;
         }
     </style>
 </head>
@@ -92,38 +130,53 @@
         <div id="results" class="results"></div>
     </div>
     <script>
-        document.getElementById('submitBtn').addEventListener('click', async () => {
-            const query = document.getElementById('queryInput').value;
-            const resultsDiv = document.getElementById('results');
+    document.getElementById('submitBtn').addEventListener('click', search);
+    document.getElementById('queryInput').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') search();
+    });
 
-            if (query.trim()) {
-                resultsDiv.innerHTML = "Processing your query...";
-                // Simulate an API call to fetch results
-                try {
-                    const response = await fetch('/query', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ query })
-                    });
+    async function search() {
+        const query = document.getElementById('queryInput').value;
+        const resultsDiv = document.getElementById('results');
 
-                    if (response.ok) {
-                        const data = await response.json();
+        if (query.trim()) {
+            resultsDiv.innerHTML = "<p>Processing your query...</p>";
+            try {
+                const response = await fetch('/query', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.results.length > 0) {
                         resultsDiv.innerHTML = `
                             <h3>Results:</h3>
-                            <ul>
-                                ${data.results.map(res => `<li>${res}</li>`).join('')}
-                            </ul>
+                            ${data.results.map(result => `
+                                <div class="result-item">
+                                    <p><strong>Name:</strong> ${result.name}</p>
+                                    <p><strong>Description:</strong> ${result.description}</p>
+                                    <p><strong>Category:</strong> ${result.category}</p>
+                                    <p><strong>Calories:</strong> ${result.calories}</p>
+                                    <p><strong>Difficulty:</strong> ${result.difficulty}</p>
+                                    <p><strong>Similarity Score:</strong> ${result.Score.toFixed(2)}</p>
+                                </div>
+                            `).join('')}
                         `;
                     } else {
-                        resultsDiv.innerHTML = "Error fetching results.";
+                        resultsDiv.innerHTML = "<p>No results found.</p>";
                     }
-                } catch (error) {
-                    resultsDiv.innerHTML = "Network error. Please try again later.";
+                } else {
+                    resultsDiv.innerHTML = "<p class='error'>Error fetching results from the server.</p>";
                 }
-            } else {
-                resultsDiv.innerHTML = "Please enter a query.";
+            } catch (error) {
+                resultsDiv.innerHTML = "<p class='error'>Network error. Please try again later.</p>";
             }
-        });
+        } else {
+            resultsDiv.innerHTML = "<p class='error'>Please enter a query.</p>";
+        }
+    }
     </script>
 </body>
 </html>
