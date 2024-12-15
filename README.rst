@@ -60,10 +60,10 @@ metadata.
    this drink is so yummy and definitely warms you up on a cold day.","['kahlua', 'brandy', 'chocolate syrup', 'ground cinnamon', 'hot coffee', 'sweetened whipped cream']",6,4.944444444444445,36,4.837758763526116,156.4,0.0,61.0,1.0,0.0,1.0,5.0,Veg,Beverage,North-American,1.75
    magic white sauce  and variations,92008,20,121684,2004-05-27,"['30-minutes-or-less', 'time-to-make', 'course', 'main-ingredient', 'preparation', 'sauces', 'condiments-etc', 'eggs-dairy', 'stove-top', 'dietary', 'savory-sauces', 'equipment']",16,"['pour milk into a saucepan', 'add all other ingredients', 'place pan over a medium heat , and , using a wire balloon whisk , whisk sauce constantly until butter melts', 'be sure to work the whisk into the edges of the pan to incorporate all the flour', 'whisk frequently until the mixture comes to a boil', 'reduce heat to low and simmer for about 5 minutes , stirring occasionally , until the sauce reaches the desired consistency', 'taste and add extra seasoning if required', 'variations: mustard sauce make sauce as per recipe , but use 1 cups milk and cup chicken stock', 'along with the salt , add 2 teaspoons mustard powder , teaspoon onion powder and substitute a good pinch of cayenne pepper for the black pepper', 'stir in 1 teaspoon lemon juice when sauce is completed', 'cheese sauce make sauce as per recipe , but use 1 cup milk and 1 cup cream', 'along with the salt , add a good pinch of nutmeg and substitute a good pinch of cayenne pepper for black pepper', 'at the simmering stage stir in 75g- 100g grated tasty cheese', 'stir in 1 teaspoon lemon juice when sauce is completed', 'parsley sauce make sauce as per recipe , but use 1 cups milk and cup cream', 'when sauce is finished , mix in 4 tablespoons finely chopped parsley and 1 teaspoon lemon juice']","sick of lumpy sauce? hate making that flour and butter roux? here's the answer! this is the easiest version of white sauce ever. you won’t believe it works until you try it! you will need a wire balloon whisk for this recipe and you must make sure that all ingredients are cold (or at least at room temperature) to begin with. thanks to english food writer, delia smith, for discovering this all-in-one method. the following are my simplified adaptations for basic white sauce, along with variations for mustard sauce, cheese sauce (mornay sauce) and parsley sauce.","['milk', 'butter', 'plain flour', 'salt', 'black pepper']",5,5.0,23,4.834348261208601,627.0,76.0,0.0,44.0,23.0,155.0,11.0,Veg,Other,Other,2.65
 
-Step 2: Initialize ``RagSearchEngine``
+Step 2: Initialize ``ragsearch``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Use the ``setup()`` function to set up the ``RagSearchEngine`` with your
+Use the ``setup()`` function to set up the ``ragsearch`` with your
 data and configuration.
 
 **Example code**:
@@ -80,13 +80,13 @@ data and configuration.
    vector_env = "production"
    embedding_dim = 768  # Set this according to your embedding model's output dimension
 
-   # Initialize the RagSearchEngine
+   # Initialize the ragsearch
    rag_engine = setup(data_path, llm_api_key, llm_model_name, vector_env, embedding_dim)
 
 Step 3: Run a Search Query
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Once the ``RagSearchEngine`` is initialized, you can perform natural
+Once the ``ragsearch`` is initialized, you can perform natural
 language searches.
 
 **Example code**:
@@ -109,7 +109,7 @@ Run ``web_interface.py`` to start the web server:
 
 .. code:: bash
 
-   python web_interface.py
+   rag_engine.run()
 
 Step 2: Access the Web Interface
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -118,7 +118,7 @@ Open your browser and navigate to:
 
 ::
 
-   http://localhost:5000
+   http://localhost:8080
 
 Step 3: Interact with the Web Interface
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

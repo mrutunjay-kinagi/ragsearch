@@ -7,24 +7,28 @@ from typing import List, Dict
 import pandas as pd
 from cohere import Client as CohereClient
 from .utils import (extract_textual_columns,
+                    preprocess_search_text,
                     preprocess_text,
-                    dataframe_to_text,
-                    batch_generate_embeddings,
                     insert_embeddings_to_vector_db,
                     search_vector_db,
                     log_data_summary)
 from .vector_db import VectorDB
 from flask import Flask, request, jsonify, render_template
 import threading
+from pathlib import Path
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class RagSearchEngine:
-    def __init__(self, data: pd.DataFrame,
+    def __init__(self,
+                 data: pd.DataFrame,
                  embedding_model: CohereClient,
                  llm_client: CohereClient,
-                 vector_db: VectorDB):
+                 vector_db: VectorDB,
+                 batch_size: int = 100,
+                 save_dir: str = "embeddings",
+                 file_name: str = "data.csv"):
         """
         Initializes the RAG Search Engine with data, an LLM client, and a vector database.
 
@@ -33,25 +37,64 @@ class RagSearchEngine:
             embedding_model (CohereClient): The client for generating text embeddings.
             llm_client (CohereClient): The client for interacting with the LLM.
             vector_db (VectorDB): The vector database for storing and querying embeddings.
+            batch_size (int): Number of rows to process in each batch.
+            save_dir (str): Directory to save intermediate embeddings.
         """
         logging.info("Initializing RAG Search Engine...")
         self.data = data
         self.embedding_model = embedding_model
         self.llm_client = llm_client
         self.vector_db = vector_db
+        self.batch_size = batch_size
+        self.save_dir = Path(save_dir)
+        self.file_name = file_name
+
+        # Ensure the embeddings directory exists
+        self.save_dir.mkdir(parents=True, exist_ok=True)
 
         # Log data summary
         log_data_summary(self.data)
 
-        # Extract textual columns and preprocess text
+        # Extract textual columns
         textual_columns = extract_textual_columns(data)
-        preprocessed_texts = dataframe_to_text(data, textual_columns)
 
-        # Generate and store embeddings
-        embeddings = batch_generate_embeddings(self.embedding_model, preprocessed_texts)
-        insert_embeddings_to_vector_db(self.vector_db, embeddings, metadata=data.to_dict(orient='records'))
+        # Process embeddings in batches and save results
+        self._process_and_store_embeddings(textual_columns)
 
         logging.info("RAG Search Engine initialized successfully.")
+
+    def _process_and_store_embeddings(self, textual_columns: list):
+        """
+        Processes and stores embeddings in batches, saving to the vector database incrementally.
+
+        Args:
+            textual_columns (list): The list of columns to combine for text embeddings.
+        """
+        # Combine textual fields into a single text column
+        self.data["combined_text"] = self.data.apply(lambda row: preprocess_text(row, textual_columns), axis=1)
+
+        # Split data into batches
+        batches = [self.data.iloc[i:i + self.batch_size] for i in range(0, len(self.data), self.batch_size)]
+        logging.info(f"Data split into {len(batches)} batches (batch size: {self.batch_size})")
+
+        for batch_idx, batch in enumerate(batches):
+            try:
+                logging.info(f"Processing batch {batch_idx + 1} with {len(batch)} records...")
+
+                # Generate embeddings
+                response = self.embedding_model.embed(texts=batch["combined_text"].tolist())
+                embeddings = response.embeddings
+
+                # Add embeddings to the batch DataFrame
+                batch["embedding"] = embeddings
+
+                # Insert embeddings and metadata into the vector database
+                metadata_columns = self.data.columns.difference(["embedding"]).tolist()
+                insert_embeddings_to_vector_db(self.vector_db, batch, metadata_columns)
+
+                logging.info(f"Batch {batch_idx + 1} successfully stored in the vector database.")
+            except Exception as e:
+                logging.error(f"Failed to process batch {batch_idx + 1}: {e}")
 
     def search(self, query: str, top_k: int = 5) -> List[Dict]:
         """
@@ -60,15 +103,39 @@ class RagSearchEngine:
         Args:
             query (str): The search query.
             top_k (int): The number of top results to return.
-        Returns:
-            List[Dict]: A list of dictionaries containing the search results.
-        """
-        logging.info(f"Processing search query: '{query}'")
-        query_embedding = self.embedding_model.embed(texts=[preprocess_text(query)]).embeddings[0]
-        results = search_vector_db(self.vector_db, query_embedding, top_k=top_k)
 
-        logging.info(f"Found {len(results)} results for the query.")
-        return results
+        Returns:
+            List[Dict]: A list of dictionaries containing metadata (excluding embeddings) and similarity scores for each result.
+        """
+        try:
+            logging.info(f"Processing search query: '{query}'")
+
+            # Generate the query embedding
+            query_embedding = self.embedding_model.embed(texts=[preprocess_search_text(query)]).embeddings[0]
+
+            # Search the vector database
+            results = search_vector_db(self.vector_db, query_embedding, top_k=top_k)
+            logging.info(f"Search completed. Found {len(results)} results.")
+
+            # Map indices to metadata and include similarity scores, excluding 'embedding'
+            enriched_results = []
+            for result in results:
+                index = result["index"]
+                metadata = self.data.iloc[index].to_dict()
+
+                # Remove the embedding from metadata if it exists
+                if "embedding" in metadata:
+                    del metadata["embedding"]
+
+                enriched_results.append({
+                    "metadata": metadata
+                })
+
+            logging.info(f"Found {len(enriched_results)} results for the query.")
+            return enriched_results
+        except Exception as e:
+            logging.error(f"Search failed: {e}")
+            raise
 
     def run(self):
         """
@@ -84,6 +151,16 @@ class RagSearchEngine:
         def index():
             return render_template('index.html')  # Serves the HTML web interface
 
+        @app.route('/data-info', methods=['GET'])
+        def data_info():
+            num_records = len(self.data)
+            columns = list(self.data.columns)
+            return jsonify({
+                "file_name": self.file_name,
+                "num_records": num_records,
+                "columns": columns
+            })
+
         # Route for handling search queries
         @app.route('/query', methods=['POST'])
         def query():
@@ -97,4 +174,4 @@ class RagSearchEngine:
             return jsonify({"results": [res['metadata'] for res in results]})
 
         # Run the Flask app on a separate thread
-        threading.Thread(target=app.run, kwargs={"host": "0.0.0.0", "port": 5000, "use_reloader": False}).start()
+        threading.Thread(target=app.run, kwargs={"host": "0.0.0.0", "port": 8080, "use_reloader": False}).start()

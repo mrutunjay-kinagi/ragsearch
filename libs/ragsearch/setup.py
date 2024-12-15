@@ -32,6 +32,8 @@ def setup(data_path: Path,
 
     # Load data
     try:
+        # Get file name of the data_path
+        file_name = data_path.name
         if data_path.suffix == '.csv':
             data = pd.read_csv(data_path)
         elif data_path.suffix == '.json':
@@ -57,10 +59,11 @@ def setup(data_path: Path,
 
     # Initialize the search engine with the loaded data
     engine = RagSearchEngine(
-        data=data,
+        data=data.head(5000),
         embedding_model=llm_client,
         llm_client=llm_client,
         vector_db=vector_db,
+        file_name = file_name
     )
 
     print("Setup complete.")
