@@ -102,7 +102,7 @@ Running the Web Interface
 Step 1: Start the Flask Server
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Run ``web_interface.py`` to start the web server:
+Run the following command to start the Flask server:
 
 .. code:: bash
 
