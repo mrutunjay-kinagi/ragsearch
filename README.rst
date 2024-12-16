@@ -76,12 +76,9 @@ data and configuration.
    # Define your data path and configuration parameters
    data_path = Path("path/to/your/sample_data.csv")
    llm_api_key = "your-cohere-api-key"
-   llm_model_name = "large"  # Adjust based on your model
-   vector_env = "production"
-   embedding_dim = 768  # Set this according to your embedding model's output dimension
 
    # Initialize the ragsearch
-   rag_engine = setup(data_path, llm_api_key, llm_model_name, vector_env, embedding_dim)
+   rag_engine = setup(data_path, llm_api_key)
 
 Step 3: Run a Search Query
 ~~~~~~~~~~~~~~~~~~~~~~~~~~

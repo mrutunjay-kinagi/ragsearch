@@ -59,7 +59,7 @@ def setup(data_path: Path,
 
     # Initialize the search engine with the loaded data
     engine = RagSearchEngine(
-        data=data.head(5000),
+        data=data,
         embedding_model=llm_client,
         llm_client=llm_client,
         vector_db=vector_db,
