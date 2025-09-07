@@ -1,10 +1,11 @@
 # ragsearch
 
-`ragsearch` is a Python library designed for building a Retrieval-Augmented Generation (RAG) application that enables natural language querying over structured data. This tool leverages embedding models and a vector database (FAISS) to provide an efficient and scalable search engine.
+`ragsearch` is a Python library designed for building a Retrieval-Augmented Generation (RAG) application that enables natural language querying over structured data. This tool leverages embedding models and a vector database (FAISS or ChromaDB) to provide an efficient and scalable search engine.
 
 ## Features
 - Seamless integration with the Cohere AI LLM for generating embeddings.
 - Utilizes FAISS for fast, in-memory vector storage and similarity search.
+- Optional ChromaDB backend for persistent, scalable vector search using SQLite.
 - Easy setup and configuration for different use cases.
 - Simple web interface for user interaction.
 
@@ -24,7 +25,7 @@ pip install /path/to/ragsearch
 Ensure that you have all necessary dependencies installed:
 
 ```bash
-pip install pandas faiss-cpu flask cohere
+pip install pandas faiss-cpu flask cohere chromadb
 ```
 
 ## Basic Setup
@@ -42,10 +43,11 @@ this drink is so yummy and definitely warms you up on a cold day.","['kahlua', '
 magic white sauce  and variations,92008,20,121684,2004-05-27,"['30-minutes-or-less', 'time-to-make', 'course', 'main-ingredient', 'preparation', 'sauces', 'condiments-etc', 'eggs-dairy', 'stove-top', 'dietary', 'savory-sauces', 'equipment']",16,"['pour milk into a saucepan', 'add all other ingredients', 'place pan over a medium heat , and , using a wire balloon whisk , whisk sauce constantly until butter melts', 'be sure to work the whisk into the edges of the pan to incorporate all the flour', 'whisk frequently until the mixture comes to a boil', 'reduce heat to low and simmer for about 5 minutes , stirring occasionally , until the sauce reaches the desired consistency', 'taste and add extra seasoning if required', 'variations: mustard sauce make sauce as per recipe , but use 1 cups milk and cup chicken stock', 'along with the salt , add 2 teaspoons mustard powder , teaspoon onion powder and substitute a good pinch of cayenne pepper for the black pepper', 'stir in 1 teaspoon lemon juice when sauce is completed', 'cheese sauce make sauce as per recipe , but use 1 cup milk and 1 cup cream', 'along with the salt , add a good pinch of nutmeg and substitute a good pinch of cayenne pepper for black pepper', 'at the simmering stage stir in 75g- 100g grated tasty cheese', 'stir in 1 teaspoon lemon juice when sauce is completed', 'parsley sauce make sauce as per recipe , but use 1 cups milk and cup cream', 'when sauce is finished , mix in 4 tablespoons finely chopped parsley and 1 teaspoon lemon juice']","sick of lumpy sauce? hate making that flour and butter roux? here's the answer! this is the easiest version of white sauce ever. you won’t believe it works until you try it! you will need a wire balloon whisk for this recipe and you must make sure that all ingredients are cold (or at least at room temperature) to begin with. thanks to english food writer, delia smith, for discovering this all-in-one method. the following are my simplified adaptations for basic white sauce, along with variations for mustard sauce, cheese sauce (mornay sauce) and parsley sauce.","['milk', 'butter', 'plain flour', 'salt', 'black pepper']",5,5.0,23,4.834348261208601,627.0,76.0,0.0,44.0,23.0,155.0,11.0,Veg,Other,Other,2.65
 ```
 
+
 ### Step 2: Initialize `ragsearch`
 Use the `setup()` function to set up the `ragsearch` with your data and configuration.
 
-**Example code**:
+**Example code (FAISS, default)**:
 ```python
 from pathlib import Path
 from ragsearch import setup
@@ -54,8 +56,28 @@ from ragsearch import setup
 data_path = Path("path/to/your/sample_data.csv")
 llm_api_key = "your-cohere-api-key"
 
-# Initialize the RagSearchEngine
+# Initialize the RagSearchEngine (FAISS backend)
 rag_engine = setup(data_path, llm_api_key)
+```
+
+**Example code (ChromaDB backend)**:
+```python
+from pathlib import Path
+from ragsearch import setup
+
+data_path = Path("path/to/your/sample_data.csv")
+llm_api_key = "your-cohere-api-key"
+chromadb_sqlite_path = "/path/to/chroma.sqlite3"
+chromadb_collection_name = "your_collection_name"
+
+# Initialize the RagSearchEngine (ChromaDB backend)
+rag_engine = setup(
+    data_path,
+    llm_api_key,
+    use_chromadb=True,
+    chromadb_sqlite_path=chromadb_sqlite_path,
+    chromadb_collection_name=chromadb_collection_name
+)
 ```
 
 ### Step 3: Run a Search Query
@@ -98,6 +120,10 @@ poetry run pytest
 ```
 
 ## Advanced Usage and Customization
+
+### Using ChromaDB Backend
+To use ChromaDB, set `use_chromadb=True` and provide the path to your ChromaDB SQLite file and collection name. This enables persistent, scalable vector search.
+
 ### Changing the Embedding Model
 Modify the `llm_model_name` parameter in `setup()` to use different models, e.g., "large" or "small".
 
