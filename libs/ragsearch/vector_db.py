@@ -10,6 +10,10 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
+
+import chromadb
+from chromadb.config import Settings
+
 class VectorDB:
     def __init__(self, embedding_dim: int = 1024):
         """
@@ -22,12 +26,29 @@ class VectorDB:
         """
         if not isinstance(embedding_dim, int) or embedding_dim <= 0:
             raise ValueError("embedding_dim must be a positive integer")
-
         # Use IndexFlatIP for cosine similarity (requires normalized embeddings)
         self.index = faiss.IndexFlatIP(embedding_dim)
         self.metadata_store = {}  # Dictionary to store metadata
         self.current_id = 0  # Incremental ID to track embeddings
         logging.info(f"FAISS VectorDB initialized with dimension: {embedding_dim}")
+
+def get_chromadb_collection(sqlite_path: str, collection_name: str):
+    """
+    Connects to a ChromaDB SQLite file and returns the specified collection using the new PersistentClient API.
+    """
+    client = chromadb.PersistentClient(path=sqlite_path)
+    return client.get_collection(collection_name)
+
+def query_chromadb(sqlite_path: str, collection_name: str, query_text: str, n_results: int = 5):
+    """
+    Query the ChromaDB collection for similar documents to the query_text.
+    """
+    collection = get_chromadb_collection(sqlite_path, collection_name)
+    results = collection.query(
+        query_texts=[query_text],
+        n_results=n_results
+    )
+    return results
 
     @staticmethod
     def _normalize_embedding(embedding: list) -> np.ndarray:

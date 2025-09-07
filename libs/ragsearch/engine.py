@@ -25,10 +25,12 @@ class RagSearchEngine:
                  data: pd.DataFrame,
                  embedding_model: CohereClient,
                  llm_client: CohereClient,
-                 vector_db: VectorDB,
+                 vector_db: VectorDB = None,
                  batch_size: int = 100,
                  save_dir: str = "embeddings",
-                 file_name: str = "data.csv"):
+                 file_name: str = "data.csv",
+                 chromadb_sqlite_path: str = None,
+                 chromadb_collection_name: str = None):
         """
         Initializes the RAG Search Engine with data, an LLM client, and a vector database.
 
@@ -48,6 +50,8 @@ class RagSearchEngine:
         self.batch_size = batch_size
         self.save_dir = Path(save_dir)
         self.file_name = file_name
+        self.chromadb_sqlite_path = chromadb_sqlite_path
+        self.chromadb_collection_name = chromadb_collection_name
 
         # Ensure the embeddings directory exists
         self.save_dir.mkdir(parents=True, exist_ok=True)
@@ -58,10 +62,19 @@ class RagSearchEngine:
         # Extract textual columns
         textual_columns = extract_textual_columns(data)
 
-        # Process embeddings in batches and save results
-        self._process_and_store_embeddings(textual_columns)
+        # Only process embeddings if using FAISS
+        if self.vector_db is not None:
+            self._process_and_store_embeddings(textual_columns)
 
         logging.info("RAG Search Engine initialized successfully.")
+    def chromadb_search(self, query: str, top_k: int = 5):
+        """
+        Query the ChromaDB collection for similar documents to the query text.
+        """
+        from .vector_db import query_chromadb
+        if not self.chromadb_sqlite_path or not self.chromadb_collection_name:
+            raise ValueError("ChromaDB path and collection name must be set for chromadb_search.")
+        return query_chromadb(self.chromadb_sqlite_path, self.chromadb_collection_name, query, n_results=top_k)
 
     def _process_and_store_embeddings(self, textual_columns: list):
         """
