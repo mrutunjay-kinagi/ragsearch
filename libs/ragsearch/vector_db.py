@@ -57,7 +57,6 @@ def query_chromadb(sqlite_path: str, collection_name: str, query_text: str, n_re
 
         Args:
             embedding (list): The embedding to normalize.
-
         Returns:
             np.ndarray: The normalized embedding.
         """
@@ -66,34 +65,6 @@ def query_chromadb(sqlite_path: str, collection_name: str, query_text: str, n_re
         if norm == 0:
             raise ValueError("Cannot normalize a zero vector.")
         return embedding / norm
-
-    def insert(self, embedding: list, metadata: dict):
-        """
-        Inserts an embedding and associated metadata into the FAISS index.
-
-        Args:
-            embedding (list): The embedding to insert.
-            metadata (dict): The metadata associated with the embedding.
-        Raises:
-            ValueError: If the embedding dimension does not match the index dimension
-        """
-        try:
-            # Check if the embedding has the correct shape
-            if len(embedding) != self.index.d:
-                raise ValueError(f"Embedding dimension mismatch: expected {self.index.d}, got {len(embedding)}")
-
-            # Normalize the embedding
-            normalized_embedding = self._normalize_embedding(embedding)
-            normalized_embedding = np.array([normalized_embedding], dtype=np.float32)
-
-            # Add to FAISS index
-            self.index.add(normalized_embedding)
-            self.metadata_store[self.current_id] = metadata
-            logging.info(f"Embedding inserted successfully with ID: {self.current_id}")
-            self.current_id += 1  # Increment the ID for the next embedding
-        except Exception as e:
-            logging.error(f"Failed to insert embedding: {e}")
-            raise
 
     def search(self, query_embedding: list, top_k: int = 5) -> list:
         """

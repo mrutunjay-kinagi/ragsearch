@@ -1,21 +1,22 @@
+import os
 import chromadb
+from chromadb.utils import embedding_functions
 
-# Create a persistent client (new API)
-client = chromadb.PersistentClient(path="/workspaces/ragsearch/chroma.sqlite3")
+chromadb_sqlite_path = os.environ.get("CHROMADB_SQLITE_PATH", "chroma.sqlite3")
+client = chromadb.PersistentClient(path=chromadb_sqlite_path)
 
-# Create a new collection
-collection = client.create_collection(name="test_collection")
+collection_name = os.environ.get("CHROMADB_COLLECTION_NAME", "test_collection")
+collection = client.get_or_create_collection(name=collection_name)
 
-# Add some sample documents
 documents = [
-    "This is a test document about chicken recipes.",
-    "Another document about vegetarian food.",
-    "A third document about desserts and cakes."
+    "Chicken curry recipe",
+    "Vegetarian pasta recipe",
+    "Chocolate cake recipe"
 ]
 metadatas = [
-    {"category": "Non-veg"},
-    {"category": "Veg"},
-    {"category": "Dessert"}
+    {"type": "main"},
+    {"type": "main"},
+    {"type": "dessert"}
 ]
 ids = ["doc1", "doc2", "doc3"]
 
@@ -25,4 +26,4 @@ collection.add(
     ids=ids
 )
 
-print("ChromaDB SQLite file created at: /workspaces/ragsearch/chroma.sqlite3")
+print(f"Collection '{collection_name}' created at '{chromadb_sqlite_path}' with sample data.")
