@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "ragsearch"
-version = "0.1.2"
+version = "0.1.3"
 description = "ragserach is a Python library designed for building a Retrieval-Augmented Generation (RAG) application that enables natural language querying over structured data. This tool leverages embedding models and a vector database (FAISS) to provide an efficient and scalable search engine."
 authors = ["Mrutunjay Kinagi < mrutunjay.kinagi @ gmail.com >"]
 license = "MIT"
