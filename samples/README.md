@@ -19,17 +19,17 @@ This folder contains example scripts to help new users get started with the rags
 3. **Run the sample scripts**
    - To test ChromaDB queries:
      ```bash
-     poetry run python samples/test_chromadb_real.py
+     poetry run python samples/demo_chromadb_real.py
      ```
    - To run the hello world sample:
      ```bash
-     poetry run python samples/test_hello_world.py
+     poetry run python samples/demo_hello_world.py
      ```
 
 ## Sample Scripts
 
-- `test_chromadb_real.py`: Demonstrates querying a ChromaDB SQLite file with natural language queries.
-- `test_hello_world.py`: Basic hello world test for the package.
+- `demo_chromadb_real.py`: Demonstrates querying a ChromaDB SQLite file with natural language queries.
+- `demo_hello_world.py`: Basic hello world test for the package.
 
 ## Notes
 - Make sure the ChromaDB file (`chroma.sqlite3`) exists before running ChromaDB samples.
