@@ -1,0 +1,39 @@
+# Copilot Coding Agent – setup steps
+#
+# This workflow is read by GitHub to configure the environment and token
+# permissions for every Copilot Coding Agent session in this repository.
+#
+# The `issues: write` permission is required so the agent can post comments
+# (e.g. `gh issue comment`) without receiving a
+# "Resource not accessible by integration" error.
+#
+# Reference:
+#   https://docs.github.com/en/copilot/using-github-copilot/coding-agent/
+#   customizing-the-development-environment-for-copilot-coding-agent
+
+name: Copilot Setup Steps
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write        # checkout, commit, push
+  issues: write          # post/update issue comments
+  pull-requests: write   # open/update PRs
+
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Poetry
+        run: pip install poetry
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
