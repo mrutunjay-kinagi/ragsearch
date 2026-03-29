@@ -29,7 +29,7 @@ Questions are ordered by dependency risk (blocking order), with the recommended 
 
 **Why it matters**  
 `setup.py` today hard-codes `VectorDB(embedding_dim=4096)` (FAISS, in-memory) while Cohere
-`embed-english-v3.0` outputs 1 024-dim vectors — a dimension mismatch that crashes at search
+`embed-english-v3.0` outputs 1024-dim vectors — a dimension mismatch that crashes at search
 time. The agreed contract flips the default to Chroma (persistent, local SQLite) and makes FAISS
 a compile-time opt-in. Without a clean abstract protocol every other question below is blocked.
 
