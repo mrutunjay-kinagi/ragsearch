@@ -32,23 +32,18 @@ class VectorDB:
         self.current_id = 0  # Incremental ID to track embeddings
         logging.info(f"FAISS VectorDB initialized with dimension: {embedding_dim}")
 
-def get_chromadb_collection(sqlite_path: str, collection_name: str):
-    """
-    Connects to a ChromaDB SQLite file and returns the specified collection using the new PersistentClient API.
-    """
-    client = chromadb.PersistentClient(path=sqlite_path)
-    return client.get_collection(collection_name)
+    def insert(self, embedding: list, metadata: dict) -> None:
+        """
+        Inserts an embedding and its associated metadata into the FAISS index.
 
-def query_chromadb(sqlite_path: str, collection_name: str, query_text: str, n_results: int = 5):
-    """
-    Query the ChromaDB collection for similar documents to the query_text.
-    """
-    collection = get_chromadb_collection(sqlite_path, collection_name)
-    results = collection.query(
-        query_texts=[query_text],
-        n_results=n_results
-    )
-    return results
+        Args:
+            embedding (list): The embedding vector to insert.
+            metadata (dict): Metadata associated with the embedding.
+        """
+        normalized = self._normalize_embedding(embedding)
+        self.index.add(np.array([normalized], dtype=np.float32))
+        self.metadata_store[self.current_id] = metadata
+        self.current_id += 1
 
     @staticmethod
     def _normalize_embedding(embedding: list) -> np.ndarray:
@@ -100,3 +95,22 @@ def query_chromadb(sqlite_path: str, collection_name: str, query_text: str, n_re
         except Exception as e:
             logging.error(f"Failed to search in vector database: {e}")
             raise
+
+
+def get_chromadb_collection(sqlite_path: str, collection_name: str):
+    """
+    Connects to a ChromaDB SQLite file and returns the specified collection using the new PersistentClient API.
+    """
+    client = chromadb.PersistentClient(path=sqlite_path)
+    return client.get_collection(collection_name)
+
+def query_chromadb(sqlite_path: str, collection_name: str, query_text: str, n_results: int = 5):
+    """
+    Query the ChromaDB collection for similar documents to the query_text.
+    """
+    collection = get_chromadb_collection(sqlite_path, collection_name)
+    results = collection.query(
+        query_texts=[query_text],
+        n_results=n_results
+    )
+    return results

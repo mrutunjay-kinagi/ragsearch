@@ -1,266 +1,363 @@
-# Top 10 Architecture & Technical Questions
+# ADR-0000 — Top-10 Prioritized Architecture & Technical Questions for ragsearch v1
 
+**Status:** Informational / Decision Backlog  
+**Date:** 2026-03-29  
 **Author:** Architect Agent  
-**Status:** Proposed  
-**Date:** 2026-03-28  
-**Related issues:** [#21 — Gather & prioritize top 10 architectural questions](https://github.com/mrutunjay-kinagi/ragsearch/issues/21), [#19 — Enterprise-grade RAG library epic](https://github.com/mrutunjay-kinagi/ragsearch/issues/19)
+**Relates to:** [Issue #21](https://github.com/mrutunjay-kinagi/ragsearch/issues/21), [Epic #19](https://github.com/mrutunjay-kinagi/ragsearch/issues/19)
 
 ---
 
-This document captures the top 10 prioritized architecture and technical questions that must be decided before ragsearch can reach enterprise-grade quality (epic #19). Each question includes why it matters, concrete decision options, and the artifact that will capture the accepted decision.
+## Context
+
+This document captures the 10 most critical architecture and technical questions that must be answered before ragsearch v1 can be considered enterprise-grade. Each question is anchored to the agreed constraints:
+
+- **local-first** — no mandatory cloud API; all components must have a viable local alternative
+- **LiteParse required** — `@run-llama/liteparse` is the default text-extraction layer for unstructured documents
+- **Chroma default / FAISS opt-in** — ChromaDB (persistent local SQLite) is the default vector backend
+- **Incremental indexing via full-file SHA-256** — source files are fingerprinted by their full SHA-256 digest; unchanged files are not re-embedded
+- **Multi-root** — the engine can index multiple directories, files, and glob patterns in one instance
+- **Chat sessions persisted** — multi-turn conversations survive process restarts
+- **`--frozen` pins to index revision** — a revision hash makes the index immutable and reproducible
+
+Questions are ordered by dependency risk (blocking order), with the recommended ADR slug for each.
 
 ---
 
-## Q1 — 🔌 Provider Abstraction (LLM, Embedding & Vector Store Plug-in Interfaces)
+## Top-10 Questions
 
-**Priority: P0 — Critical foundation for all other work**
+### Q1 — Vector-Backend Abstraction: Chroma as Default, FAISS as Opt-in
 
-### Why it matters
+**Why it matters**  
+`setup.py` today hard-codes `VectorDB(embedding_dim=4096)` (FAISS, in-memory) while Cohere
+`embed-english-v3.0` outputs 1024-dim vectors — a dimension mismatch that crashes at search
+time. The agreed contract flips the default to Chroma (persistent, local SQLite) and makes FAISS
+a compile-time opt-in. Without a clean abstract protocol every other question below is blocked.
 
-`setup()` hard-wires `CohereClient` for both embedding and LLM generation, and `VectorDB` (`vector_db.py`) conflates a concrete FAISS index with module-level ChromaDB helper functions — there is no shared interface. Any user wanting OpenAI, Azure, Anthropic, or a local model must fork core files. This creates an unmaintainable vendor monoculture and blocks enterprise adoption.
+**Options**
 
-### Decision options
+| Option | Description | Trade-off |
+|--------|-------------|-----------|
+| A | `VectorBackend` Protocol + concrete Chroma & FAISS impls, selected via factory | Clean separation; extra module |
+| B | Single class with mode enum | Lower churn but coupling grows with each backend |
+| C | Plugin entry-points (`ragsearch.vector_backends`) | Maximum extensibility; over-engineered for v1 |
 
-| Option | Summary | Pro | Con |
-|--------|---------|-----|-----|
-| A | `Protocol`-based interfaces (`EmbeddingProvider`, `LLMProvider`, `VectorStoreProvider`) via `typing.Protocol` (structural subtyping) | Zero base-class overhead; easy mocking | Requires Python ≥ 3.8; no enforced `__init__` signature |
-| B | Abstract base classes (`abc.ABC`) with `@abstractmethod` | Explicit contract; `isinstance` checks work | Slightly more boilerplate; inheritance coupling |
-| C | Callable duck-typing + validation at `setup()` entry point only | Minimal code change | No IDE support; poor discoverability; no formal contract |
+**Recommendation** — Option A.  
+Define `VectorBackend` protocol in a new `ragsearch/backends/` subpackage. `ChromaBackend`
+(default, persists to `.ragsearch/chroma.sqlite3`) and `FAISSBackend` (opt-in, in-memory or
+mmap). Factory reads config key `vector_backend = "chroma" | "faiss"`. Embedding dimension is
+always sourced from the embedding model adapter — never hardcoded.
 
-**Recommended:** Option B (ABC) for public-facing interfaces — clear contracts are essential for external contributors; optionally exposed as `Protocol` aliases for type-check-only use.
-
-**Artifact:** `docs/adr/ADR-0001-provider-abstraction.md` → new module `ragsearch/providers/base.py`
-
----
-
-## Q2 — 📄 Unstructured Document Ingestion Pipeline
-
-**Priority: P1 — Enables the dominant enterprise use case**
-
-### Why it matters
-
-`setup()` only calls `pd.read_csv / read_json / read_parquet`, limiting ragsearch to tabular data. PDFs, DOCX files, HTML pages, audio transcripts, and images represent the vast majority of enterprise knowledge-base content. Without an ingestion pipeline the library cannot compete with LangChain, LlamaIndex, or Haystack.
-
-### Decision options
-
-| Option | Summary | Pro | Con |
-|--------|---------|-----|-----|
-| A | Built-in loaders for each type (PyMuPDF, python-docx, BeautifulSoup, Whisper, etc.) bundled in core | Single install; consistent API | Heavy transitive dependencies; slow cold-start |
-| B | `DocumentLoader` protocol with optional built-in loaders as extras (`pip install ragsearch[pdf]`) | Lean core; user pays for what they use | More packaging complexity |
-| C | Delegate entirely to users — accept `List[Document]` as input | Zero new dependencies | Pushes all complexity to users; worse DX |
-
-**Recommended:** Option B — follow the LlamaIndex extras pattern; define the `DocumentLoader` interface in `ragsearch/ingestion/base.py`.
-
-**Artifact:** `docs/adr/ADR-0002-document-ingestion-pipeline.md` → `ragsearch/ingestion/` package
+**ADR to create:** `ADR-0001-vector-backend-abstraction`  
+*Must capture:* interface contract, default/opt-in selection mechanism, migration path from
+current `VectorDB`, embedding dimension source of truth.
 
 ---
 
-## Q3 — 🤖 Runtime & LLM Selection (Cohere, OpenAI, vLLM, Local Models)
+### Q2 — LiteParse as Required Document-Parsing Layer
 
-**Priority: P1 — Enterprise deployments require LLM choice**
+**Why it matters**  
+The library today only ingests CSV / JSON / Parquet. Issue #18 mandates `@run-llama/liteparse`
+as the default text-extraction pipeline for unstructured documents (PDF, DOCX, HTML, images).
+Every ingestion path must pass through a parser before chunking and embedding. Coupling pandas
+I/O directly to `setup()` prevents this.
 
-### Why it matters
+**Options**
 
-`RagSearchEngine.__init__` accepts `embedding_model: CohereClient` and `llm_client: CohereClient` with explicit Cohere types in the signature. This makes the type system itself a barrier to runtime swappability. Enterprise deployments require air-gapped / on-premise options (vLLM, Ollama, HuggingFace) and multi-cloud providers (OpenAI, Azure OpenAI, Bedrock).
+| Option | Description | Trade-off |
+|--------|-------------|-----------|
+| A | `DocumentParser` protocol + `LiteParseAdapter` as default | Pluggable, testable |
+| B | Call LiteParse inline in `setup()` | Fast but un-testable and inflexible |
+| C | Pre-processing CLI step that converts to CSV | Separates concerns but breaks streaming ingestion |
 
-### Decision options
+**Recommendation** — Option A.  
+New `ragsearch/parsers/` subpackage. `LiteParseAdapter` wraps LiteParse and returns an iterator
+of `ParsedDocument(text: str, metadata: dict)`. `setup()` dispatches on file extension:
+structured files (CSV/JSON/Parquet) → pandas path; everything else → LiteParse path. Both paths
+produce `ParsedDocument` objects consumed by the chunker.
 
-| Option | Summary | Pro | Con |
-|--------|---------|-----|-----|
-| A | Replace typed params with `LLMProvider` / `EmbeddingProvider` ABC (from Q1); ship adapters for Cohere, OpenAI, vLLM in `ragsearch/providers/` | Clean API; adapter pattern is well understood | Breaking change in `setup()` and `RagSearchEngine.__init__` |
-| B | Accept any callable/object; validate duck-typed methods at runtime | Non-breaking | No static analysis help; cryptic runtime errors |
-| C | Configuration-driven provider selection (string keys + registry) | Enables YAML/env-var switching | Magic strings; harder to test custom providers |
-
-**Recommended:** Option A combined with a `ProviderRegistry` for string-based convenience (Option C used as a thin layer over A).
-
-**Artifact:** `docs/adr/ADR-0003-runtime-llm-selection.md` → `ragsearch/providers/{cohere,openai,vllm}.py`
-
----
-
-## Q4 — ✂️ Chunking Strategy & Context-Window Management
-
-**Priority: P1 — Silent data loss with current implementation**
-
-### Why it matters
-
-`_process_and_store_embeddings()` in `engine.py` embeds entire rows as single strings via `preprocess_text(row, textual_columns)`. There is no splitting, no overlap, and the embedding dimension is hard-coded to `4096` in `setup()` (`VectorDB(embedding_dim=4096)`). Long documents are silently truncated by the model's token limit, causing invisible data loss and degraded retrieval quality.
-
-### Decision options
-
-| Option | Summary | Pro | Con |
-|--------|---------|-----|-----|
-| A | Fixed-size token-aware chunker with configurable `chunk_size` / `chunk_overlap` (via `tiktoken` or provider tokenizer) | Predictable; provider-agnostic | Token counting adds latency |
-| B | Semantic chunker (split on sentence/paragraph boundaries using NLTK or spaCy) | Higher retrieval quality | Heavier deps; harder to tune |
-| C | Recursive character text splitter (LangChain-style heuristic, no NLP deps) | Lightweight; good default | Less semantically aware |
-
-**Recommended:** Ship Option C as the default `Chunker` implementation; expose a `Chunker` ABC so users can plug in Option B. Make `chunk_size`, `chunk_overlap`, and `embedding_dim` first-class config fields — not hard-coded in `setup()`.
-
-**Artifact:** `docs/adr/ADR-0004-chunking-strategy.md` → `ragsearch/ingestion/chunkers.py`
+**ADR to create:** `ADR-0002-document-parsing-pipeline`  
+*Must capture:* LiteParse as required runtime dependency, `DocumentParser` protocol, dispatch
+table for file-type routing, handling of parsing failures (partial ingestion vs. hard stop).
 
 ---
 
-## Q5 — ⚡ Async / Streaming Architecture
+### Q3 — Incremental Indexing via Full-File SHA-256 Fingerprinting
 
-**Priority: P2 — Required for high-QPS and streaming LLM responses**
+**Why it matters**  
+Today `setup()` re-embeds the entire dataset on every start-up — expensive for large corpora and
+incompatible with the `--frozen` flag. Incremental indexing using the **full-file SHA-256**
+digest lets the engine skip unchanged source files, making cold starts near-instant after the
+first run.
 
-### Why it matters
+**Options**
 
-Every call in `engine.py` and `utils.py` is synchronous. The Flask server in `run()` uses a background `threading.Thread`, which means concurrent search requests block each other on the GIL. Enterprise use cases (high-QPS APIs, streaming LLM responses, large batch ingestion) require async I/O. The current design also makes integration into FastAPI or Django async views impossible.
+| Option | Description | Trade-off |
+|--------|-------------|-----------|
+| A | Manifest file (`.ragsearch/index.manifest.json`) keyed by `{root_path: sha256}` | Simple, human-readable |
+| B | Embed manifest inside Chroma as a reserved metadata collection | Single store; harder to inspect |
+| C | Git-object-like content-addressed store | Powerful; far beyond v1 scope |
 
-### Decision options
+**Recommendation** — Option A.  
+On each ingestion run: compute `sha256(file_bytes)` for every source file; compare to manifest;
+re-embed only changed/new files; tombstone deleted files in the backend; atomically write the new
+manifest. Manifest format:
 
-| Option | Summary | Pro | Con |
-|--------|---------|-----|-----|
-| A | Introduce `AsyncRagSearchEngine` with `async def search(...)` using `asyncio`; keep sync version as-is | No breaking change; progressive migration | Two code paths to maintain |
-| B | Refactor core to be async-first; provide sync wrappers via `asyncio.run()` | Single clean code path | Breaking change; more migration effort |
-| C | Use `concurrent.futures.ThreadPoolExecutor` to wrap sync calls | Trivial to implement | No true async; GIL still blocks CPU-bound ops |
+```json
+{
+  "version": 1,
+  "created_at": "<iso8601>",
+  "roots": [
+    {
+      "path": "/abs/path/to/root",
+      "sha256": "<hex>",
+      "indexed_at": "<iso8601>",
+      "backend_ids": ["chroma-doc-id-1", "..."]
+    }
+  ]
+}
+```
 
-**Recommended:** Option A for the current release — follow the `httpx` / `openai-python` dual-mode pattern. Deprecate the sync-only path in a future major version. Replace `threading.Thread` in `run()` as part of Q9 (web decoupling).
-
-**Artifact:** `docs/adr/ADR-0005-async-streaming-architecture.md`
-
----
-
-## Q6 — ⚙️ Configuration & Secrets Management
-
-**Priority: P0 — API keys stored as plain strings is a security concern**
-
-### Why it matters
-
-`config.py`'s `load_configuration()` reads only JSON. API keys are passed as plain strings to `setup()` and stored as instance attributes on `RagSearchEngine`. There is no environment variable support, no YAML, no schema validation, and no secrets-safe handling. Enterprise deployments use Vault, AWS Secrets Manager, or at minimum environment variables — none of which are currently supported.
-
-### Decision options
-
-| Option | Summary | Pro | Con |
-|--------|---------|-----|-----|
-| A | Pydantic v2 `BaseSettings` model — reads env vars, `.env` files, JSON, YAML; validated at startup | Full validation, IDE autocomplete, layered overrides | Adds `pydantic-settings` dependency |
-| B | Simple `dataclasses` + `python-dotenv` for env vars, manual validation | Lighter dependency | No nested config support; boilerplate validation |
-| C | Keep JSON-only; add env-var interpolation (`${VAR}` syntax in JSON values) | Minimal change | Non-standard; fragile parsing |
-
-**Recommended:** Option A — Pydantic v2 `BaseSettings` is the de-facto standard for Python services. API keys must use `SecretStr` type to prevent accidental logging.
-
-**Artifact:** `docs/adr/ADR-0006-configuration-secrets.md` → `ragsearch/settings.py` (replaces `ragsearch/config.py`)
-
----
-
-## Q7 — 📊 Observability (Structured Logging, Metrics & Distributed Tracing)
-
-**Priority: P2 — Enterprise operations requirement**
-
-### Why it matters
-
-Every module calls `logging.basicConfig(level=logging.INFO, ...)` at module level. This is a **library anti-pattern** — it overrides the host application's log configuration the moment ragsearch is imported. There are no structured log fields, no request IDs, no latency metrics, and no trace context. Enterprise deployments require integration with Datadog, Grafana, and OpenTelemetry stacks.
-
-### Decision options
-
-| Option | Summary | Pro | Con |
-|--------|---------|-----|-----|
-| A | Replace `basicConfig` with `structlog` for structured JSON logs; emit OpenTelemetry spans for `embed`/`search`/`ingest`; expose Prometheus metrics via optional `ragsearch[observability]` extra | Industry standard; composable | ~3 new optional deps |
-| B | Switch to `logging.getLogger(__name__)` (no `basicConfig`), add a `JSONFormatter`; defer metrics/tracing | Zero new deps; fixes anti-pattern immediately | No metrics, no tracing |
-| C | Provide lifecycle hooks/callbacks (`on_search_start`, `on_search_end`) and let users instrument | Maximum flexibility | Pushes all observability burden to users |
-
-**Recommended:** Option B immediately (non-breaking, zero deps — removes the `logging.basicConfig` anti-pattern in all four modules); add Option A as `ragsearch[observability]` extra in the next minor release. Add lifecycle hooks from Option C as well — they enable custom APM integrations.
-
-**Artifact:** `docs/adr/ADR-0007-observability.md`
+**ADR to create:** `ADR-0003-incremental-indexing`  
+*Must capture:* SHA-256 unit (full file, not chunk), manifest schema and atomic write strategy,
+handling of renames (delete + re-index), interaction with `--frozen` flag (manifest is immutable
+when frozen).
 
 ---
 
-## Q8 — 🏢 Multi-Tenancy & Data Isolation
+### Q4 — Multi-root Ingestion
 
-**Priority: P2 — Required before any SaaS deployment**
+**Why it matters**  
+`setup(data_path: Path, ...)` accepts exactly one file. Enterprise use requires indexing multiple
+directories, mixed file types, and glob patterns in a single engine instance.
 
-### Why it matters
+**Options**
 
-The current `VectorDB` (FAISS) is a single shared in-memory index; ChromaDB uses a single `collection_name` per engine instance with no access control. There is no namespace isolation and no per-tenant boundary. A multi-tenant SaaS deployment would mix all customer data in one index, creating both a **data privacy risk** and incorrect cross-tenant retrieval results.
+| Option | Description | Trade-off |
+|--------|-------------|-----------|
+| A | `setup(roots: list[Path | str | glob])` | Natural; one call |
+| B | Config-file-driven roots (`ragsearch.toml` `[[roots]]` stanzas) | Reproducible; extra config layer |
+| C | Mutating `add_root()` / `remove_root()` API | Incremental; complex lifecycle |
 
-### Decision options
+**Recommendation** — Option A with a thin config-file layer on top (B).  
+`setup(roots=[...])` accepts `Path`, `str`, and glob patterns. Config file (`ragsearch.toml`)
+can declare roots; CLI `--root` flag appends to the list. Each root carries optional metadata
+(labels, priority) passed through to document metadata for filtering at query time.
 
-| Option | Summary | Pro | Con |
-|--------|---------|-----|-----|
-| A | `tenant_id` as a first-class concept in `RagSearchEngine`; ChromaDB collection name and FAISS index prefixed/isolated per tenant | Clean isolation; maps to existing ChromaDB collection model | Requires collection-per-tenant lifecycle management |
-| B | Metadata filtering at query time — store `tenant_id` in embedding metadata, filter results post-search | Simple implementation | No true isolation; FAISS doesn't support metadata filtering natively |
-| C | External orchestration only — document that users must instantiate one engine per tenant | Zero code change | Not enterprise-ready; poor DX |
-
-**Recommended:** Option A for vector store isolation + RBAC hooks (documented interface, not yet implemented) for access control.
-
-**Artifact:** `docs/adr/ADR-0008-multi-tenancy.md`
-
----
-
-## Q9 — 🌐 Web Interface Decoupling (Flask Embedded in `RagSearchEngine.run()`)
-
-**Priority: P0 — Flask is a forced dependency for a pure library use case**
-
-### Why it matters
-
-`RagSearchEngine.run()` in `engine.py` directly imports `flask`, creates a `Flask` app, defines route handlers as closures over `self`, and launches a `threading.Thread`. This means: (1) Flask is a **mandatory transitive dependency** even for users who only call `engine.search()`; (2) there is no way to integrate into an existing web framework; (3) the app cannot be deployed as a standalone WSGI/ASGI service; and (4) threading conflicts arise under production WSGI servers (gunicorn, uWSGI).
-
-### Decision options
-
-| Option | Summary | Pro | Con |
-|--------|---------|-----|-----|
-| A | Extract Flask app to `ragsearch/server/` sub-package (`ragsearch[server]` optional extra); `RagSearchEngine` has zero Flask imports; server wires engine via dependency injection | Clean separation; library vs. server are independent | More files; users must explicitly install extra |
-| B | Provide a FastAPI app factory `create_app(engine: RagSearchEngine) -> FastAPI` instead of Flask; mark `run()` as deprecated | Modern async-ready API; better production story | Breaking change for existing `run()` users |
-| C | Keep current approach but gate Flask import with `try/except ImportError` | Minimal change | Still tight coupling; confusing when Flask not installed |
-
-**Recommended:** Option A first (extract, keep Flask for backward-compat), then Option B in the next major version (FastAPI app factory with streaming support, aligned with Q5).
-
-**Artifact:** `docs/adr/ADR-0009-web-interface-decoupling.md` → `ragsearch/server/flask_app.py`
+**ADR to create:** `ADR-0004-multi-root-ingestion`  
+*Must capture:* root resolution order, deduplication of overlapping roots, per-root metadata
+propagation, interaction with SHA-256 manifest (manifest keyed per resolved root).
 
 ---
 
-## Q10 — 🔖 Versioning, Backward-Compatibility & Deprecation Strategy
+### Q5 — `--frozen` Flag and Index Revision Pinning
 
-**Priority: P0 — Foundation for a trustworthy library**
+**Why it matters**  
+Reproducibility and auditability require the ability to pin searches to a specific, immutable
+snapshot of the index — identical results regardless of when or where the query runs. `--frozen`
+must prevent any writes to the index while still allowing reads.
 
-### Why it matters
+**Options**
 
-There are currently no deprecation warnings in any module, no `CHANGELOG`, no migration guides, and no declared compatibility policy. With the scope of breaking changes required by Q1–Q9 above (new ABCs, new `settings.py`, new `setup()` signature, async APIs), users will experience **silent breakage on upgrade**. Enterprise users require stability guarantees and advance notice before adopting a library.
+| Option | Description | Trade-off |
+|--------|-------------|-----------|
+| A | Revision = SHA-256 of manifest snapshot; lock file refuses mutating ingestion | Lightweight, portable |
+| B | Chroma native snapshots / export | Vendor-specific, limited portability |
+| C | Full copy-on-write of Chroma DB directory per revision | Safe; storage-heavy |
 
-### Decision options
+**Recommendation** — Option A.  
+Each successful ingestion writes an immutable revision file
+(`.ragsearch/revisions/<revision_hash>.json`) containing the manifest snapshot and a pointer to
+the Chroma collection name (or FAISS mmap path). `--frozen <revision_hash>` loads that revision
+read-only; any `setup()` call with `frozen=True` raises `IndexFrozenError` on attempted writes.
 
-| Option | Summary | Pro | Con |
-|--------|---------|-----|-----|
-| A | Strict SemVer with `CHANGELOG.md` (Keep a Changelog format), `warnings.warn(..., DeprecationWarning)` on deprecated APIs, 1-minor-version deprecation window before removal | Industry standard; builds trust | Requires discipline across all contributors |
-| B | Calendar versioning (CalVer `YYYY.MM.PATCH`) | Simple; communicates recency | Doesn't communicate compatibility guarantees |
-| C | No formal policy — rely on release notes | Zero overhead now | Unusable in enterprise contexts with dependency pinning |
-
-**Recommended:** Option A — SemVer is non-negotiable for a library. Add a `deprecated` decorator utility to `ragsearch/utils.py`, enforce `CHANGELOG.md` updates in CI, and document the compatibility policy in `CONTRIBUTING.md`.
-
-**Artifact:** `docs/adr/ADR-0010-versioning-deprecation-strategy.md` + `CHANGELOG.md` + CI changelog-lint step
-
----
-
-## Summary Priority Matrix
-
-| # | Topic | Impact | Effort | Priority |
-|---|-------|--------|--------|----------|
-| Q1 | Provider abstraction | 🔴 Critical | Medium | P0 |
-| Q6 | Config & secrets | 🔴 Critical | Low | P0 |
-| Q9 | Web decoupling | 🔴 Critical | Medium | P0 |
-| Q10 | Versioning/deprecation | 🟢 Foundation | Low | P0 (process) |
-| Q2 | Unstructured ingestion | 🟠 High | High | P1 |
-| Q3 | Runtime/LLM selection | 🟠 High | Medium | P1 |
-| Q4 | Chunking strategy | 🟠 High | Medium | P1 |
-| Q5 | Async/streaming | 🟡 Medium | High | P2 |
-| Q7 | Observability | 🟡 Medium | Low | P2 |
-| Q8 | Multi-tenancy | 🟡 Medium | High | P2 |
+**ADR to create:** `ADR-0005-index-revision-pinning`  
+*Must capture:* revision hash computation, revision file schema, `IndexFrozenError` semantics,
+interaction with multi-root and incremental indexing.
 
 ---
 
-## ADR Backlog Created by This Document
+### Q6 — Chat Session Persistence
 
-The following ADR stubs are to be authored (one PR per ADR) as decisions are made:
+**Why it matters**  
+Single-turn search (`engine.search(query)`) is insufficient for conversational use. Sessions must
+persist across process restarts, support multi-turn history, and be independently reviewable or
+exportable.
 
-- [ ] `docs/adr/ADR-0001-provider-abstraction.md`
-- [ ] `docs/adr/ADR-0002-document-ingestion-pipeline.md`
-- [ ] `docs/adr/ADR-0003-runtime-llm-selection.md`
-- [ ] `docs/adr/ADR-0004-chunking-strategy.md`
-- [ ] `docs/adr/ADR-0005-async-streaming-architecture.md`
-- [ ] `docs/adr/ADR-0006-configuration-secrets.md`
-- [ ] `docs/adr/ADR-0007-observability.md`
-- [ ] `docs/adr/ADR-0008-multi-tenancy.md`
-- [ ] `docs/adr/ADR-0009-web-interface-decoupling.md`
-- [ ] `docs/adr/ADR-0010-versioning-deprecation-strategy.md`
+**Options**
 
-> Linked to enterprise-grade epic #19
+| Option | Description | Trade-off |
+|--------|-------------|-----------|
+| A | SQLite-backed session store (`.ragsearch/sessions.sqlite`) | Zero extra deps; atomic writes |
+| B | JSON file per session (`.ragsearch/sessions/<uuid>.json`) | Simpler; no atomic updates |
+| C | In-memory sessions with optional pluggable backend | Flexible; violates "persisted" constraint |
+
+**Recommendation** — Option A.  
+`SessionManager` class owns the SQLite store. A `Session` holds `id`, `created_at`, `metadata`,
+and an ordered list of `Turn(role, content, retrieved_chunks, timestamp)`. `engine.chat(
+session_id, message)` appends to the session, passes the last-N turns as context to the LLM,
+and returns a `Turn`. Sessions survive process restart; old sessions are queryable.
+
+**ADR to create:** `ADR-0006-chat-session-persistence`  
+*Must capture:* SQLite schema, `Turn` data model (including retrieved chunk references for
+citations), context window management strategy (last-N turns, token counting), session lifecycle
+(create / resume / archive / delete).
+
+---
+
+### Q7 — Embedding Model Abstraction for Local-First Operation
+
+**Why it matters**  
+`engine.py` and `setup.py` are hard-wired to `cohere.Client`. Local-first means Cohere calls
+must be optional. Users on air-gapped machines need sentence-transformers or Ollama embeddings
+out of the box.
+
+**Options**
+
+| Option | Description | Trade-off |
+|--------|-------------|-----------|
+| A | `EmbeddingModel` Protocol with adapters for Cohere, sentence-transformers, Ollama | Clean; minimal deps |
+| B | LangChain/LlamaIndex embedding abstraction | Reuses ecosystem; heavy dependency |
+| C | `isinstance` union checks | Anti-pattern; breaks extensibility |
+
+**Recommendation** — Option A.  
+Minimal `EmbeddingModel` protocol (structural subtyping via `typing.Protocol`). Ship
+`CohereEmbeddingAdapter`, `SentenceTransformerAdapter` (local default), and
+`OllamaEmbeddingAdapter`. `setup()` selects adapter from config key
+`embedding_model = "sentence-transformers/all-MiniLM-L6-v2"` (local default) or
+`"cohere:embed-english-v3.0"`. Each adapter exposes `embedding_dim` so the vector backend never
+needs it hardcoded.
+
+**ADR to create:** `ADR-0007-embedding-model-abstraction`  
+*Must capture:* `EmbeddingModel` protocol signature, adapter naming convention, local default
+model selection, how `embedding_dim` is propagated to the vector backend, batch size handling.
+
+---
+
+### Q8 — LLM / Generative Model Abstraction for Local-First Operation
+
+**Why it matters**  
+`engine.py` uses `cohere.Client` for generation as well as embedding. Local-first support
+requires Ollama / LlamaCpp / vLLM as first-class options. Decoupling generation from embedding
+also allows mixing providers (local embed + cloud LLM, or vice-versa).
+
+**Options**
+
+| Option | Description | Trade-off |
+|--------|-------------|-----------|
+| A | `LLMClient` protocol with per-provider adapters | Thin; requires one adapter per provider |
+| B | OpenAI-compatible `/v1/chat/completions` as universal wire format | Works for Ollama, vLLM without custom adapters |
+| C | LangChain `BaseLLM` | Reuses ecosystem; large dependency tree |
+
+**Recommendation** — Option B layered on A.  
+Define `LLMClient` protocol (A) but make the default adapter an OpenAI-compat HTTP client (B)
+so Ollama, vLLM, and any OpenAI-compatible local server work with `base_url` config only. Cohere
+gets its own adapter. Config:
+
+```toml
+[llm]
+provider = "ollama"
+model = "llama3.2"
+base_url = "http://localhost:11434"
+```
+
+**ADR to create:** `ADR-0008-llm-abstraction`  
+*Must capture:* `LLMClient` protocol, OpenAI-compat adapter spec, Cohere adapter, prompt
+template ownership (engine vs. adapter), streaming support plan, timeout/retry policy.
+
+---
+
+### Q9 — CLI Interface and Configuration Schema
+
+**Why it matters**  
+There is currently no CLI and no declarative config format. The `--frozen` flag, multi-root, and
+session management all require a CLI. A config file (`ragsearch.toml`) enables reproducible,
+version-controlled configurations — critical for local-first, team workflows.
+
+**Options**
+
+| Option | Description | Trade-off |
+|--------|-------------|-----------|
+| A | `typer`-based CLI + `pydantic`-based config model loaded from `ragsearch.toml` | Type-safe; auto-generates help |
+| B | `argparse` + manual dict validation | Lighter; verbose and error-prone |
+| C | Click + Dynaconf | Powerful; over-engineered for v1 |
+
+**Recommendation** — Option A.  
+Top-level commands:
+
+```
+ragsearch index [--root <path>]... [--frozen <rev>]
+ragsearch search "<query>" [--session <id>] [--top-k N]
+ragsearch chat [--session <id>]
+ragsearch sessions list|show|delete [<id>]
+ragsearch revisions list|pin|unpin [<rev>]
+```
+
+Config hierarchy: CLI flags > `ragsearch.toml` > env vars > built-in defaults. Config schema
+documented via Pydantic model and shipped as JSON Schema for editor support.
+
+**ADR to create:** `ADR-0009-cli-and-config-schema`  
+*Must capture:* command taxonomy, config file location resolution (`.ragsearch/config.toml` or
+`$RAGSEARCH_CONFIG`), `--frozen` flag semantics in CLI, Pydantic config model as source of
+truth, backward-compatibility policy for config keys.
+
+---
+
+### Q10 — Observability, Error Hierarchy, and Structured Logging
+
+**Why it matters**  
+All modules call `logging.basicConfig(...)` independently — a library anti-pattern that conflicts
+with host-application logging config. There is no structured error hierarchy, no ingestion
+metrics, and no query latency tracking. Enterprise adoption requires predictable, filterable logs
+and machine-readable error codes.
+
+**Options**
+
+| Option | Description | Trade-off |
+|--------|-------------|-----------|
+| A | `structlog` + typed `ragsearch.errors` exception hierarchy | Zero config for library consumers |
+| B | `loguru` | Simpler API; non-standard for library use |
+| C | Standard `logging` with `NullHandler` + dataclass error context | Zero new runtime deps |
+
+**Recommendation** — Option C for the library core (no `basicConfig` calls, one `NullHandler`
+per module), with Option A available as an optional extras install
+(`pip install ragsearch[observability]`). Exception hierarchy:
+
+```
+RagSearchError
+├── IndexFrozenError
+├── BackendError
+├── ParsingError
+├── EmbeddingError
+└── SessionError
+```
+
+Emit structured `INFO` log events at ingestion start/finish (file count, embedding count,
+elapsed time); `DEBUG` per batch; `WARNING` on SHA-256 manifest conflicts.
+
+**ADR to create:** `ADR-0010-observability-and-error-hierarchy`  
+*Must capture:* NullHandler best practice for library packages, `RagSearchError` hierarchy,
+structured event schema (ingestion / query / session events), optional `structlog` integration,
+metrics surface (counters vs. histograms, no mandatory external sink for local-first).
+
+---
+
+## Priority & Dependency Order
+
+| Priority | # | Question | Blocks |
+|----------|---|----------|--------|
+| 1 | Q7 | Embedding model abstraction | Q1, Q3 |
+| 2 | Q1 | Vector backend abstraction (Chroma default) | Q3, Q5 |
+| 3 | Q2 | LiteParse integration | Q3, Q4 |
+| 4 | Q3 | Incremental indexing / SHA-256 | Q5 |
+| 5 | Q4 | Multi-root ingestion | Q3, Q9 |
+| 6 | Q5 | `--frozen` / revision pinning | Q9 |
+| 7 | Q8 | LLM abstraction | Q6 |
+| 8 | Q6 | Chat session persistence | Q9 |
+| 9 | Q9 | CLI & config schema | — |
+| 10 | Q10 | Observability & error hierarchy | — |
+
+**Suggested ADR authoring order:**
+`0007 → 0001 → 0002 → 0003 → 0004 → 0005 → 0008 → 0006 → 0009 → 0010`
+
+Each ADR lives at `docs/adr/ADR-XXXX-<slug>.md` and must be linked back to this issue before
+implementation begins on the relevant component.
