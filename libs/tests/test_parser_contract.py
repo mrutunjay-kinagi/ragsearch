@@ -167,17 +167,22 @@ class TestParserContractErrors:
             _parse_file(f)
 
     def test_corrupt_csv_raises_runtime_error(self, tmp_path):
-        # A file with binary noise will fail CSV parsing
+        # A file with binary noise may fail CSV parsing or be read as garbage.
+        # Either outcome is acceptable, but if an exception is raised it must
+        # NOT be a bare ValueError or FileNotFoundError (those are reserved for
+        # semantic errors such as unsupported extension / missing file).
         f = tmp_path / "corrupt.csv"
         f.write_bytes(b"\x00\x01\x02\x03bad\xff\xfe")
-        # pandas may read this without error or raise; either is acceptable,
-        # but if it raises it must be RuntimeError or a subclass (not ValueError/FileNotFoundError)
+        raised = False
         try:
             _parse_file(f)
         except (RuntimeError, pd.errors.ParserError, UnicodeDecodeError):
-            pass  # acceptable — corrupt files may raise various errors
+            raised = True
         except (ValueError, FileNotFoundError) as exc:
-            pytest.fail(f"Unexpected exception type: {type(exc).__name__}: {exc}")
+            pytest.fail(f"Unexpected exception type for corrupt file: {type(exc).__name__}: {exc}")
+        # If no exception was raised, pandas silently read the garbage bytes,
+        # which is also a valid (lenient) behaviour for the current implementation.
+        _ = raised  # documented: may or may not raise
 
     def test_txt_extension_raises_value_error(self, tmp_path):
         f = tmp_path / "file.txt"

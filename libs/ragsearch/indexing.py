@@ -66,12 +66,16 @@ class IncrementalIndexer:
     # Hashing
     # ------------------------------------------------------------------
 
+    # Buffer size used for streaming reads; 64 KB is a good trade-off between
+    # memory usage and the number of system-call round-trips for most files.
+    _READ_CHUNK = 65_536
+
     @staticmethod
     def compute_sha256(path: Union[str, Path]) -> str:
         """Return the hex-encoded SHA-256 digest for *path*."""
         digest = hashlib.sha256()
         with open(path, "rb") as fh:
-            for chunk in iter(lambda: fh.read(65_536), b""):
+            for chunk in iter(lambda: fh.read(IncrementalIndexer._READ_CHUNK), b""):
                 digest.update(chunk)
         return digest.hexdigest()
 

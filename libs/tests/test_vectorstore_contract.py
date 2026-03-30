@@ -38,9 +38,10 @@ class VectorStoreContract(abc.ABC):
     def make_store(self, dim: int = DIM) -> object:
         """Return a freshly initialised VectorStore with *dim* dimensions."""
 
-    def _random_unit_vec(self, dim: int | None = None) -> list:
+    def _unit_vec(self, dim: int | None = None, seed: int = 42) -> list:
+        """Return a deterministic unit vector of length *dim* for use in tests."""
         d = dim or self.DIM
-        v = np.random.default_rng(42).standard_normal(d).astype(np.float32)
+        v = np.random.default_rng(seed).standard_normal(d).astype(np.float32)
         return (v / np.linalg.norm(v)).tolist()
 
     # ------------------------------------------------------------------
@@ -62,25 +63,25 @@ class VectorStoreContract(abc.ABC):
 
     def test_insert_single_vector(self):
         store = self.make_store()
-        store.insert(self._random_unit_vec(), {"id": "doc-0"})
+        store.insert(self._unit_vec(), {"id": "doc-0"})
         assert store.index.ntotal == 1
 
     def test_insert_increments_current_id(self):
         store = self.make_store()
-        store.insert(self._random_unit_vec(), {"id": "a"})
-        store.insert(self._random_unit_vec(), {"id": "b"})
+        store.insert(self._unit_vec(), {"id": "a"})
+        store.insert(self._unit_vec(), {"id": "b"})
         assert store.current_id == 2
 
     def test_insert_stores_metadata(self):
         store = self.make_store()
         meta = {"title": "hello", "score": 0.99}
-        store.insert(self._random_unit_vec(), meta)
+        store.insert(self._unit_vec(), meta)
         assert store.metadata_store[0] == meta
 
     def test_insert_multiple_metadata_are_independent(self):
         store = self.make_store()
-        store.insert(self._random_unit_vec(), {"k": "v0"})
-        store.insert(self._random_unit_vec(), {"k": "v1"})
+        store.insert(self._unit_vec(), {"k": "v0"})
+        store.insert(self._unit_vec(), {"k": "v1"})
         assert store.metadata_store[0]["k"] == "v0"
         assert store.metadata_store[1]["k"] == "v1"
 
@@ -90,14 +91,14 @@ class VectorStoreContract(abc.ABC):
 
     def test_search_returns_list(self):
         store = self.make_store()
-        store.insert(self._random_unit_vec(), {})
-        results = store.search(self._random_unit_vec(), top_k=1)
+        store.insert(self._unit_vec(), {})
+        results = store.search(self._unit_vec(), top_k=1)
         assert isinstance(results, list)
 
     def test_search_result_has_required_keys(self):
         store = self.make_store()
-        store.insert(self._random_unit_vec(), {"x": 1})
-        result = store.search(self._random_unit_vec(), top_k=1)[0]
+        store.insert(self._unit_vec(), {"x": 1})
+        result = store.search(self._unit_vec(), top_k=1)[0]
         assert "index" in result
         assert "similarity" in result
         assert "metadata" in result
@@ -105,8 +106,8 @@ class VectorStoreContract(abc.ABC):
     def test_search_respects_top_k(self):
         store = self.make_store()
         for i in range(5):
-            store.insert(self._random_unit_vec(), {"i": i})
-        results = store.search(self._random_unit_vec(), top_k=3)
+            store.insert(self._unit_vec(), {"i": i})
+        results = store.search(self._unit_vec(), top_k=3)
         assert len(results) <= 3
 
     def test_search_returns_most_similar_first(self):
@@ -123,20 +124,20 @@ class VectorStoreContract(abc.ABC):
     def test_search_similarity_decreasing(self):
         store = self.make_store()
         for i in range(4):
-            store.insert(self._random_unit_vec(), {"i": i})
-        results = store.search(self._random_unit_vec(), top_k=4)
+            store.insert(self._unit_vec(), {"i": i})
+        results = store.search(self._unit_vec(), top_k=4)
         sims = [r["similarity"] for r in results]
         assert sims == sorted(sims, reverse=True)
 
     def test_search_empty_store_raises(self):
         store = self.make_store()
         with pytest.raises(ValueError, match="empty"):
-            store.search(self._random_unit_vec(), top_k=5)
+            store.search(self._unit_vec(), top_k=5)
 
     def test_search_top_k_larger_than_index_does_not_crash(self):
         store = self.make_store()
-        store.insert(self._random_unit_vec(), {})
-        results = store.search(self._random_unit_vec(), top_k=100)
+        store.insert(self._unit_vec(), {})
+        results = store.search(self._unit_vec(), top_k=100)
         assert len(results) <= 1
 
     # ------------------------------------------------------------------
@@ -165,7 +166,7 @@ class VectorStoreContract(abc.ABC):
     def test_metadata_not_shared_between_entries(self):
         store = self.make_store()
         m = {"key": "original"}
-        store.insert(self._random_unit_vec(), m)
+        store.insert(self._unit_vec(), m)
         m["key"] = "mutated"
         # The stored value should still be "original" (snapshot at insert time)
         # OR "mutated" – both are acceptable because the contract only requires

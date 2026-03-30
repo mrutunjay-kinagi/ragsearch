@@ -107,7 +107,7 @@ class ChatMemory:
         """Return a shallow copy of the current message list."""
         return list(self._messages)
 
-    def __len__(self) -> int:  # pragma: no branch
+    def __len__(self) -> int:
         return len(self._messages)
 
     def to_dict(self) -> List[dict]:
