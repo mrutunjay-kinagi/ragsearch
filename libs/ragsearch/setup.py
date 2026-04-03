@@ -42,6 +42,12 @@ def _load_structured_data(data_path: Path) -> pd.DataFrame:
 
 
 def _load_unstructured_data(data_path: Path) -> pd.DataFrame:
+    """
+    Load unstructured data (text, PDF, DOCX, etc.) by dispatching to parser via get_parser().
+    Returns DataFrame with columns: text, metadata, source_path, parser_name.
+    Raises NoDataFoundError if no parseable content is found or all content is empty.
+    Integration point for Slice 1 parser contract (see docs/adr/ADR-0000-top-10-architecture-questions.md).
+    """
     parser = get_parser(data_path)
     documents = list(parser.parse(data_path))
     if not documents:
@@ -71,18 +77,25 @@ def setup(data_path: Path,
           chromadb_sqlite_path: str = None,
           chromadb_collection_name: str = None):
     """
-    Initializes the RAG search engine.
+    Initializes the RAG search engine from structured or unstructured data.
+
+    Data loading strategy (Slice 2 integration):
+    - Structured (CSV, JSON, Parquet): Loaded directly via pandas, bypassing parser.
+    - Unstructured (.txt, .pdf, .docx, etc.): Dispatched to parser via get_parser() contract.
 
     Args:
-        data_path (Path): The path to the data file.
+        data_path (Path): The path to the data file (structured or unstructured).
         llm_api_key (str): The API key for the Cohere client.
+        use_chromadb (bool): Whether to use ChromaDB instead of FAISS (default: False).
+        chromadb_sqlite_path (str): Path to ChromaDB SQLite database (required if use_chromadb=True).
+        chromadb_collection_name (str): ChromaDB collection name (required if use_chromadb=True).
     Returns:
         RagSearchEngine: The initialized RAG search engine.
     Raises:
         FileNotFoundError: If the data path does not exist.
-        ValueError: If the file type is not supported.
-        RuntimeError: If there is an error loading the data,
-        initializing the Cohere client, or connecting to the vector database.
+        NoDataFoundError: If no data is found after parsing (unstructured) or if file is empty (structured).
+        RagSearchError: If parser fails (unstructured path only).
+        RuntimeError: For other data loading, Cohere client, or vector database errors.
     """
     print("Starting setup of the RAG Search Engine...")
 
