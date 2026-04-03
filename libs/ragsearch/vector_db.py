@@ -13,6 +13,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 import chromadb
 from chromadb.config import Settings
+from .errors import NoDataFoundError
 
 class VectorDB:
     def __init__(self, embedding_dim: int = 1024):
@@ -74,7 +75,7 @@ class VectorDB:
         """
         try:
             if self.index.ntotal == 0:
-                raise ValueError("The FAISS index is empty. Add embeddings before searching.")
+                raise NoDataFoundError("The FAISS index is empty. Add embeddings before searching.")
 
             # Normalize the query embedding
             normalized_query = self._normalize_embedding(query_embedding)

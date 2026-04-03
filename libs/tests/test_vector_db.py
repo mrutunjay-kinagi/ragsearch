@@ -5,6 +5,7 @@ Tests cover insert, search, and _normalize_embedding without external services.
 import pytest
 import numpy as np
 
+from libs.ragsearch.errors import NoDataFoundError
 from libs.ragsearch.vector_db import VectorDB
 
 
@@ -100,7 +101,7 @@ class TestVectorDBSearch:
 
     def test_search_empty_index_raises(self):
         db = VectorDB(embedding_dim=4)
-        with pytest.raises(ValueError, match="empty"):
+        with pytest.raises(NoDataFoundError, match="empty"):
             db.search([1.0, 0.0, 0.0, 0.0])
 
     def test_search_top_k_capped_by_index_size(self):
