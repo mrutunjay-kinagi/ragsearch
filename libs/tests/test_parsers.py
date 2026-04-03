@@ -42,7 +42,14 @@ def test_duck_typed_parser_satisfies_protocol():
 
     assert isinstance(parser, DocumentParser)
     assert parser.supports(Path("note.txt")) is True
-    assert next(parser.parse(Path(__file__))).metadata == {"parser": "duck"}
+
+
+def test_duck_typed_parser_uses_text_fixture(tmp_path):
+    parser = DuckParser()
+    path = tmp_path / "note.txt"
+    path.write_text("duck parser fixture", encoding="utf-8")
+
+    assert next(parser.parse(path)).metadata == {"parser": "duck"}
 
 
 def test_parsing_error_is_subclass_of_ragsearch_error():
@@ -124,6 +131,50 @@ def test_liteparse_adapter_raises_timeout(monkeypatch, tmp_path):
     monkeypatch.setattr("libs.ragsearch.parsers._liteparse.subprocess.run", raise_timeout)
 
     with pytest.raises(ParseTimeoutError, match="timed out"):
+        list(LiteParseAdapter().parse(path))
+
+
+def test_liteparse_adapter_raises_for_invalid_document_shapes(monkeypatch, tmp_path):
+    path = tmp_path / "sample.txt"
+    path.write_text("ignored", encoding="utf-8")
+
+    class FakeCompletedProcess:
+        returncode = 0
+        stdout = json.dumps(
+            {
+                "documents": [
+                    {"text": 123, "metadata": {}},
+                ]
+            }
+        )
+        stderr = ""
+
+    monkeypatch.setattr(LiteParseAdapter, "available", classmethod(lambda cls: True))
+    monkeypatch.setattr("libs.ragsearch.parsers._liteparse.subprocess.run", lambda *args, **kwargs: FakeCompletedProcess())
+
+    with pytest.raises(ParseCorruptError, match="invalid text"):
+        list(LiteParseAdapter().parse(path))
+
+
+def test_liteparse_adapter_raises_for_invalid_metadata_shape(monkeypatch, tmp_path):
+    path = tmp_path / "sample.txt"
+    path.write_text("ignored", encoding="utf-8")
+
+    class FakeCompletedProcess:
+        returncode = 0
+        stdout = json.dumps(
+            {
+                "documents": [
+                    {"text": "ok", "metadata": ["not", "a", "dict"]},
+                ]
+            }
+        )
+        stderr = ""
+
+    monkeypatch.setattr(LiteParseAdapter, "available", classmethod(lambda cls: True))
+    monkeypatch.setattr("libs.ragsearch.parsers._liteparse.subprocess.run", lambda *args, **kwargs: FakeCompletedProcess())
+
+    with pytest.raises(ParseCorruptError, match="invalid metadata"):
         list(LiteParseAdapter().parse(path))
 
 

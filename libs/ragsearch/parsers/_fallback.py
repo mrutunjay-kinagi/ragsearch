@@ -1,5 +1,5 @@
 """
-Pure-Python fallback document parser.
+Pure-Python fallback document parser with optional backends.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from ._models import ParsedDocument
 
 
 class FallbackParser:
-    """Pure Python parser used when LiteParse is unavailable."""
+    """Python fallback parser used when LiteParse is unavailable."""
 
     SUPPORTED_SUFFIXES = {".txt", ".md", ".html", ".htm", ".pdf", ".docx"}
 
@@ -34,7 +34,7 @@ class FallbackParser:
         if suffix in {".txt", ".md"}:
             yield ParsedDocument(
                 text=path.read_text(encoding="utf-8"),
-                metadata={"source_path": str(path), "parser_name": "fallback/plain_text"},
+                metadata={},
                 source_path=str(path),
                 parser_name="fallback/plain_text",
             )
@@ -49,7 +49,7 @@ class FallbackParser:
             text = BeautifulSoup(path.read_text(encoding="utf-8"), "html.parser").get_text(" ", strip=True)
             yield ParsedDocument(
                 text=text,
-                metadata={"source_path": str(path), "parser_name": "fallback/bs4"},
+                metadata={},
                 source_path=str(path),
                 parser_name="fallback/bs4",
             )
@@ -69,7 +69,7 @@ class FallbackParser:
 
             yield ParsedDocument(
                 text=text,
-                metadata={"source_path": str(path), "parser_name": "fallback/pypdf"},
+                metadata={},
                 source_path=str(path),
                 parser_name="fallback/pypdf",
             )
@@ -89,7 +89,7 @@ class FallbackParser:
 
             yield ParsedDocument(
                 text=text,
-                metadata={"source_path": str(path), "parser_name": "fallback/python-docx"},
+                metadata={},
                 source_path=str(path),
                 parser_name="fallback/python-docx",
             )

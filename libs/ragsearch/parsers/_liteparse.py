@@ -4,6 +4,7 @@ LiteParse subprocess adapter.
 
 from __future__ import annotations
 
+import os
 import json
 import shutil
 import subprocess
@@ -17,6 +18,8 @@ from ._models import ParsedDocument
 class LiteParseAdapter:
     """Adapter around the LiteParse CLI."""
 
+    ENV_CLI_PATH = "RAGSEARCH_LITEPARSE_CLI"
+
     SUPPORTED_SUFFIXES = {".pdf", ".docx", ".doc", ".html", ".htm", ".md", ".txt", ".png", ".jpg", ".jpeg"}
 
     def __init__(self, timeout_s: int = 60):
@@ -26,7 +29,16 @@ class LiteParseAdapter:
     def available(cls) -> bool:
         """Return True when the required Node executables are available."""
 
+        cli_path = os.environ.get(cls.ENV_CLI_PATH)
+        if cli_path:
+            return bool(shutil.which(cli_path) or Path(cli_path).exists())
         return bool(shutil.which("node") and shutil.which("npx"))
+
+    def _build_command(self, path: Path) -> list[str]:
+        cli_path = os.environ.get(self.ENV_CLI_PATH)
+        if cli_path:
+            return [cli_path, "--json", str(path)]
+        return ["npx", "--no-install", "@run-llama/liteparse", "--json", str(path)]
 
     def supports(self, path: Path | str) -> bool:
         path = Path(path) if not isinstance(path, Path) else path
@@ -44,7 +56,7 @@ class LiteParseAdapter:
         if not self.supports(path):
             raise UnsupportedFileTypeError(f"LiteParse does not support file type: {path.suffix}")
 
-        command = ["npx", "--yes", "@run-llama/liteparse", "--json", str(path)]
+        command = self._build_command(path)
         try:
             result = subprocess.run(
                 command,
@@ -75,7 +87,15 @@ class LiteParseAdapter:
             if not isinstance(document, dict):
                 raise ParseCorruptError(f"LiteParse output for {path} contained an invalid document entry")
             text = document.get("text", "")
-            metadata = document.get("metadata", {}) or {}
+            if not isinstance(text, str):
+                raise ParseCorruptError(f"LiteParse output for {path} contained a document with invalid text")
+
+            metadata = document.get("metadata", {})
+            if metadata is None:
+                metadata = {}
+            elif not isinstance(metadata, dict):
+                raise ParseCorruptError(f"LiteParse output for {path} contained a document with invalid metadata")
+
             source_path = document.get("source_path", str(path))
             parser_name = document.get("parser_name", "liteparse")
             yield ParsedDocument(
