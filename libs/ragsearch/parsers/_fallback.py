@@ -32,8 +32,11 @@ class FallbackParser:
 
         suffix = path.suffix.lower()
         if suffix in {".txt", ".md"}:
+            text = path.read_text(encoding="utf-8")
+            if not text.strip():
+                return
             yield ParsedDocument(
-                text=path.read_text(encoding="utf-8"),
+                text=text,
                 metadata={},
                 source_path=str(path),
                 parser_name="fallback/plain_text",
@@ -47,6 +50,8 @@ class FallbackParser:
                 raise ParserUnavailableError("Install beautifulsoup4 to parse HTML files", cause=exc) from exc
 
             text = BeautifulSoup(path.read_text(encoding="utf-8"), "html.parser").get_text(" ", strip=True)
+            if not text.strip():
+                return
             yield ParsedDocument(
                 text=text,
                 metadata={},
@@ -67,6 +72,9 @@ class FallbackParser:
             except Exception as exc:
                 raise ParseCorruptError(f"Failed to parse PDF file: {path}", cause=exc) from exc
 
+            if not text.strip():
+                return
+
             yield ParsedDocument(
                 text=text,
                 metadata={},
@@ -86,6 +94,9 @@ class FallbackParser:
                 text = "\n".join(paragraph.text for paragraph in document.paragraphs).strip()
             except Exception as exc:
                 raise ParseCorruptError(f"Failed to parse DOCX file: {path}", cause=exc) from exc
+
+            if not text.strip():
+                return
 
             yield ParsedDocument(
                 text=text,
