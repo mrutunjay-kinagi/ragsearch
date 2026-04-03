@@ -3,6 +3,7 @@ Tests for parser boundary contracts and fallback behavior.
 """
 
 from dataclasses import asdict
+import json
 from pathlib import Path
 
 import pytest
@@ -78,7 +79,14 @@ def test_liteparse_adapter_returns_documents_for_mocked_subprocess(monkeypatch, 
 
     class FakeCompletedProcess:
         returncode = 0
-        stdout = '{"text": "liteparse text", "metadata": {"pages": 1}, "source_path": "' + str(path) + '", "parser_name": "liteparse"}'
+        stdout = json.dumps(
+            {
+                "text": "liteparse text",
+                "metadata": {"pages": 1},
+                "source_path": str(path),
+                "parser_name": "liteparse",
+            }
+        )
         stderr = ""
 
     monkeypatch.setattr(LiteParseAdapter, "available", classmethod(lambda cls: True))

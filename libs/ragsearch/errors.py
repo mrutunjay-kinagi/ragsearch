@@ -2,6 +2,8 @@
 Shared ragsearch error hierarchy.
 """
 
+from __future__ import annotations
+
 
 class RagSearchError(Exception):
     """Base error for ragsearch failures."""

@@ -14,7 +14,7 @@ from ._models import ParsedDocument
 class FallbackParser:
     """Pure Python parser used when LiteParse is unavailable."""
 
-    SUPPORTED_SUFFIXES = {".txt", ".md", ".html", ".htm", ".pdf", ".docx", ".doc"}
+    SUPPORTED_SUFFIXES = {".txt", ".md", ".html", ".htm", ".pdf", ".docx"}
 
     def supports(self, path: Path | str) -> bool:
         path = Path(path) if not isinstance(path, Path) else path
@@ -44,7 +44,7 @@ class FallbackParser:
             try:
                 from bs4 import BeautifulSoup
             except ImportError as exc:
-                raise ParserUnavailableError("Install ragsearch[parsers] to parse HTML files", cause=exc) from exc
+                raise ParserUnavailableError("Install beautifulsoup4 to parse HTML files", cause=exc) from exc
 
             text = BeautifulSoup(path.read_text(encoding="utf-8"), "html.parser").get_text(" ", strip=True)
             yield ParsedDocument(
@@ -59,7 +59,7 @@ class FallbackParser:
             try:
                 from pypdf import PdfReader
             except ImportError as exc:
-                raise ParserUnavailableError("Install ragsearch[parsers] to parse PDF files", cause=exc) from exc
+                raise ParserUnavailableError("Install pypdf to parse PDF files", cause=exc) from exc
 
             try:
                 reader = PdfReader(str(path))
@@ -75,17 +75,17 @@ class FallbackParser:
             )
             return
 
-        if suffix in {".docx", ".doc"}:
+        if suffix == ".docx":
             try:
                 import docx
             except ImportError as exc:
-                raise ParserUnavailableError("Install ragsearch[parsers] to parse DOCX/DOC files", cause=exc) from exc
+                raise ParserUnavailableError("Install python-docx to parse DOCX files", cause=exc) from exc
 
             try:
                 document = docx.Document(str(path))
                 text = "\n".join(paragraph.text for paragraph in document.paragraphs).strip()
             except Exception as exc:
-                raise ParseCorruptError(f"Failed to parse DOCX/DOC file: {path}", cause=exc) from exc
+                raise ParseCorruptError(f"Failed to parse DOCX file: {path}", cause=exc) from exc
 
             yield ParsedDocument(
                 text=text,

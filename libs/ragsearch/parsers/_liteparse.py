@@ -10,7 +10,7 @@ import subprocess
 from pathlib import Path
 from typing import Iterator
 
-from ..errors import ParseCorruptError, ParseTimeoutError, ParserUnavailableError
+from ..errors import ParseCorruptError, ParseTimeoutError, ParserUnavailableError, UnsupportedFileTypeError
 from ._models import ParsedDocument
 
 
@@ -33,16 +33,16 @@ class LiteParseAdapter:
         return path.suffix.lower() in self.SUPPORTED_SUFFIXES
 
     def parse(self, path: Path | str) -> Iterator[ParsedDocument]:
-        if not self.available():
-            raise ParserUnavailableError("LiteParse CLI not found; install Node.js 18+ and npx")
         if path is None:
             raise ParseCorruptError("Input path cannot be None")
         if not isinstance(path, Path):
             path = Path(path)
+        if not self.available():
+            raise ParserUnavailableError("LiteParse CLI not found; install Node.js 18+ and npx")
         if not path.exists():
             raise ParseCorruptError(f"Input path is missing or unreadable: {path}")
         if not self.supports(path):
-            raise ParseCorruptError(f"LiteParse does not support file type: {path.suffix}")
+            raise UnsupportedFileTypeError(f"LiteParse does not support file type: {path.suffix}")
 
         command = ["npx", "--yes", "@run-llama/liteparse", "--json", str(path)]
         try:
