@@ -144,8 +144,27 @@ class RagSearchEngine:
                 if "embedding" in metadata:
                     del metadata["embedding"]
 
+                source_path = metadata.get("source_path", "")
+                parser_name = metadata.get("parser_name", "")
+                if not isinstance(source_path, str):
+                    source_path = str(source_path)
+                if not isinstance(parser_name, str):
+                    parser_name = str(parser_name)
+
+                excerpt_source = metadata.get("text") or metadata.get("combined_text") or ""
+                excerpt = str(excerpt_source)[:200]
+
+                citation = {
+                    "record_id": int(index),
+                    "source_path": source_path,
+                    "parser_name": parser_name,
+                    "excerpt": excerpt,
+                }
+
                 enriched_results.append({
-                    "metadata": metadata
+                    "metadata": metadata,
+                    "citation": citation,
+                    "similarity": float(result.get("similarity", 0.0)),
                 })
 
             logging.info(f"Found {len(enriched_results)} results for the query.")
@@ -188,7 +207,7 @@ class RagSearchEngine:
 
             top_k = int(request_data.get('top_k', 5))
             results = self.search(query, top_k=top_k)
-            return jsonify({"results": [res['metadata'] for res in results]})
+            return jsonify({"results": results})
 
         # Run the Flask app on a separate thread
         threading.Thread(target=app.run, kwargs={"host": "0.0.0.0", "port": 8080, "use_reloader": False}).start()
