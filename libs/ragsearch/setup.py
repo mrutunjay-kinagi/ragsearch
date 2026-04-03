@@ -22,9 +22,48 @@ import os
 from pathlib import Path
 import pandas as pd
 from cohere import Client as CohereClient
-from .errors import NoDataFoundError
+from .errors import NoDataFoundError, RagSearchError
+from .parsers import get_parser
 from .vector_db import VectorDB, query_chromadb
 from .engine import RagSearchEngine
+
+
+STRUCTURED_EXTENSIONS = {".csv", ".json", ".parquet", ".pq"}
+
+
+def _load_structured_data(data_path: Path) -> pd.DataFrame:
+    if data_path.suffix == '.csv':
+        return pd.read_csv(data_path)
+    if data_path.suffix == '.json':
+        return pd.read_json(data_path)
+    if data_path.suffix in ['.parquet', '.pq']:
+        return pd.read_parquet(data_path)
+    raise ValueError(f"Unsupported file type: {data_path.suffix}")
+
+
+def _load_unstructured_data(data_path: Path) -> pd.DataFrame:
+    parser = get_parser(data_path)
+    documents = list(parser.parse(data_path))
+    if not documents:
+        raise NoDataFoundError(f"No data found in parsed input file: {data_path}")
+
+    rows = []
+    for document in documents:
+        text = document.text.strip() if isinstance(document.text, str) else ""
+        if not text:
+            continue
+        rows.append(
+            {
+                "text": text,
+                "metadata": document.metadata,
+                "source_path": document.source_path,
+                "parser_name": document.parser_name,
+            }
+        )
+
+    if not rows:
+        raise NoDataFoundError(f"No data found in parsed input file: {data_path}")
+    return pd.DataFrame(rows)
 
 def setup(data_path: Path,
           llm_api_key: str,
@@ -55,14 +94,12 @@ def setup(data_path: Path,
     try:
         # Get file name of the data_path
         file_name = data_path.name
-        if data_path.suffix == '.csv':
-            data = pd.read_csv(data_path)
-        elif data_path.suffix == '.json':
-            data = pd.read_json(data_path)
-        elif data_path.suffix in ['.parquet', '.pq']:
-            data = pd.read_parquet(data_path)
+        if data_path.suffix in STRUCTURED_EXTENSIONS:
+            data = _load_structured_data(data_path)
         else:
-            raise ValueError(f"Unsupported file type: {data_path.suffix}")
+            data = _load_unstructured_data(data_path)
+    except RagSearchError:
+        raise
     except Exception as e:
         raise RuntimeError(f"Failed to load data: {e}")
 
