@@ -178,6 +178,75 @@ def test_liteparse_adapter_raises_for_invalid_metadata_shape(monkeypatch, tmp_pa
         list(LiteParseAdapter().parse(path))
 
 
+def test_liteparse_adapter_raises_for_non_zero_exit(monkeypatch, tmp_path):
+    path = tmp_path / "sample.txt"
+    path.write_text("ignored", encoding="utf-8")
+
+    class FakeCompletedProcess:
+        returncode = 1
+        stdout = ""
+        stderr = "boom"
+
+    monkeypatch.setattr(LiteParseAdapter, "available", classmethod(lambda cls: True))
+    monkeypatch.setattr("libs.ragsearch.parsers._liteparse.subprocess.run", lambda *args, **kwargs: FakeCompletedProcess())
+
+    with pytest.raises(ParseCorruptError, match="LiteParse failed"):
+        list(LiteParseAdapter().parse(path))
+
+
+def test_liteparse_adapter_raises_for_invalid_json(monkeypatch, tmp_path):
+    path = tmp_path / "sample.txt"
+    path.write_text("ignored", encoding="utf-8")
+
+    class FakeCompletedProcess:
+        returncode = 0
+        stdout = "not-json"
+        stderr = ""
+
+    monkeypatch.setattr(LiteParseAdapter, "available", classmethod(lambda cls: True))
+    monkeypatch.setattr("libs.ragsearch.parsers._liteparse.subprocess.run", lambda *args, **kwargs: FakeCompletedProcess())
+
+    with pytest.raises(ParseCorruptError, match="not valid JSON"):
+        list(LiteParseAdapter().parse(path))
+
+
+def test_liteparse_adapter_raises_for_missing_documents_list(monkeypatch, tmp_path):
+    path = tmp_path / "sample.txt"
+    path.write_text("ignored", encoding="utf-8")
+
+    class FakeCompletedProcess:
+        returncode = 0
+        stdout = json.dumps({"summary": "no documents"})
+        stderr = ""
+
+    monkeypatch.setattr(LiteParseAdapter, "available", classmethod(lambda cls: True))
+    monkeypatch.setattr("libs.ragsearch.parsers._liteparse.subprocess.run", lambda *args, **kwargs: FakeCompletedProcess())
+
+    with pytest.raises(ParseCorruptError, match="did not contain documents"):
+        list(LiteParseAdapter().parse(path))
+
+
+def test_liteparse_adapter_raises_for_invalid_document_entry(monkeypatch, tmp_path):
+    path = tmp_path / "sample.txt"
+    path.write_text("ignored", encoding="utf-8")
+
+    class FakeCompletedProcess:
+        returncode = 0
+        stdout = json.dumps({"documents": ["bad-entry"]})
+        stderr = ""
+
+    monkeypatch.setattr(LiteParseAdapter, "available", classmethod(lambda cls: True))
+    monkeypatch.setattr("libs.ragsearch.parsers._liteparse.subprocess.run", lambda *args, **kwargs: FakeCompletedProcess())
+
+    with pytest.raises(ParseCorruptError, match="invalid document entry"):
+        list(LiteParseAdapter().parse(path))
+
+
+def test_get_parser_raises_for_none_path():
+    with pytest.raises(UnsupportedFileTypeError, match="got None"):
+        get_parser(None)
+
+
 def test_get_parser_prefers_liteparse_when_available(monkeypatch, tmp_path):
     path = tmp_path / "sample.txt"
     path.write_text("hello", encoding="utf-8")

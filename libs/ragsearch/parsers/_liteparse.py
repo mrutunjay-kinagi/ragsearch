@@ -79,7 +79,10 @@ class LiteParseAdapter:
 
         documents = payload.get("documents") if isinstance(payload, dict) else None
         if documents is None:
-            documents = [payload]
+            if isinstance(payload, dict) and "text" in payload:
+                documents = [payload]
+            else:
+                raise ParseCorruptError(f"LiteParse output for {path} did not contain documents")
         if not isinstance(documents, list) or not documents:
             raise ParseCorruptError(f"LiteParse output for {path} did not contain documents")
 
