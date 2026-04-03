@@ -195,3 +195,22 @@ def test_setup_unstructured_parser_timeout_propagates(tmp_path, monkeypatch):
 
     with pytest.raises(ParseTimeoutError, match="timed out"):
         setup(Path(data_path), llm_api_key="test-key")
+
+
+def test_setup_unstructured_all_whitespace_documents_raise_no_data(tmp_path, monkeypatch):
+    data_path = tmp_path / "sample.txt"
+    data_path.write_text("hello", encoding="utf-8")
+
+    class WhitespaceParser:
+        def parse(self, path):
+            return iter(
+                [
+                    ParsedDocument(text="  ", metadata={}, source_path=str(path), parser_name="fake"),
+                    ParsedDocument(text="\n\t", metadata={}, source_path=str(path), parser_name="fake"),
+                ]
+            )
+
+    monkeypatch.setattr("libs.ragsearch.setup.get_parser", lambda *args, **kwargs: WhitespaceParser())
+
+    with pytest.raises(NoDataFoundError, match="No data found"):
+        setup(Path(data_path), llm_api_key="test-key")

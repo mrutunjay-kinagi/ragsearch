@@ -40,6 +40,7 @@ For LiteParse support, ensure Node.js 18+ and npx are available:
 ```bash
 node --version
 npx --version
+npx --yes @run-llama/liteparse --help
 ```
 
 ## Basic Setup
@@ -113,6 +114,8 @@ Parser selection behavior:
 - If LiteParse is unavailable, fallback parser is used for supported file types.
 - Unsupported types raise `UnsupportedFileTypeError`.
 
+Note: supported extensions can be backend-dependent. LiteParse supports additional types such as `.doc`, `.png`, `.jpg`, and `.jpeg`, while fallback parsing is intentionally narrower.
+
 ### Step 3: Run a Search Query
 Once the `ragsearch` is initialized, you can perform natural language searches.
 
@@ -175,9 +178,9 @@ Edit `index.html` in the `templates` directory to adjust the UI layout or add mo
 | Error | Typical Cause | Resolution |
 | --- | --- | --- |
 | `ParserUnavailableError: LiteParse CLI not found` | Node.js/npx not installed, or custom CLI path invalid | Install Node.js 18+, verify `npx` works, or set `RAGSEARCH_LITEPARSE_CLI` to a valid executable |
-| `ParseTimeoutError` | Large/complex document exceeded parse timeout | Retry with smaller file or tune timeout by using `LiteParseAdapter(timeout_s=...)` in custom parser flows |
+| `ParseTimeoutError` | Large/complex document exceeded parse timeout | Retry with smaller file; timeout tuning via `LiteParseAdapter(timeout_s=...)` applies to custom parser flows, not the default `setup()` path |
 | `ParseCorruptError` | Corrupt file or invalid parser output payload | Validate file integrity and retry; inspect parser output/logs |
-| `UnsupportedFileTypeError` | Extension not supported by LiteParse/fallback parser | Convert to supported format (`.txt`, `.pdf`, `.docx`, `.html`, `.md`) |
+| `UnsupportedFileTypeError` | Extension not supported by the active parser backend | Convert to a supported format; fallback supports `.txt/.md/.html/.htm/.pdf/.docx`, LiteParse supports additional formats |
 | `NoDataFoundError` | File parsed but content was empty/whitespace only | Verify source file contains readable text content |
 
 ### Performance Notes
