@@ -28,6 +28,7 @@ from .vector_db import VectorDB, query_chromadb
 from .engine import RagSearchEngine
 
 
+# File types loaded directly via pandas (no parser dispatch needed)
 STRUCTURED_EXTENSIONS = {".csv", ".json", ".parquet", ".pq"}
 
 
@@ -44,9 +45,18 @@ def _load_structured_data(data_path: Path) -> pd.DataFrame:
 def _load_unstructured_data(data_path: Path) -> pd.DataFrame:
     """
     Load unstructured data (text, PDF, DOCX, etc.) by dispatching to parser via get_parser().
+    
     Returns DataFrame with columns: text, metadata, source_path, parser_name.
-    Raises NoDataFoundError if no parseable content is found or all content is empty.
-    Integration point for Slice 1 parser contract (see docs/adr/ADR-0000-top-10-architecture-questions.md).
+    - text: str, non-empty after stripping whitespace
+    - metadata: dict, defaults to empty dict if parser returns None
+    - source_path: str, normalized to string format
+    - parser_name: str, identifies which parser was used
+    
+    Raises:
+        NoDataFoundError: If no parseable content found or all content is empty.
+        ValueError: If document structure is invalid (bad text or metadata types).
+    
+    Integration point: Slice 1 parser contract (see docs/adr/ADR-0000-top-10-architecture-questions.md).
     """
     parser = get_parser(data_path)
     documents = list(parser.parse(data_path))
@@ -55,17 +65,30 @@ def _load_unstructured_data(data_path: Path) -> pd.DataFrame:
 
     rows = []
     for document in documents:
-        text = document.text.strip() if isinstance(document.text, str) else ""
+        # Validate and normalize text
+        if not isinstance(document.text, (str, type(None))):
+            raise ValueError(f"Invalid document.text type: {type(document.text).__name__}")
+        text = (document.text.strip() if isinstance(document.text, str) else "").strip()
         if not text:
             continue
-        rows.append(
-            {
-                "text": text,
-                "metadata": document.metadata,
-                "source_path": document.source_path,
-                "parser_name": document.parser_name,
-            }
-        )
+        
+        # Validate and normalize metadata (ensure dict)
+        if document.metadata is not None and not isinstance(document.metadata, dict):
+            raise ValueError(f"Invalid document.metadata type: {type(document.metadata).__name__}")
+        metadata = document.metadata if isinstance(document.metadata, dict) else {}
+        
+        # Normalize source_path to string
+        source_path = str(document.source_path) if document.source_path else ""
+        
+        # Ensure parser_name is string
+        parser_name = document.parser_name or "unknown"
+        
+        rows.append({
+            "text": text,
+            "metadata": metadata,
+            "source_path": source_path,
+            "parser_name": parser_name,
+        })
 
     if not rows:
         raise NoDataFoundError(f"No data found in parsed input file: {data_path}")
@@ -92,33 +115,46 @@ def setup(data_path: Path,
     Returns:
         RagSearchEngine: The initialized RAG search engine.
     Raises:
+        TypeError: If data_path is not a Path object.
         FileNotFoundError: If the data path does not exist.
-        NoDataFoundError: If no data is found after parsing (unstructured) or if file is empty (structured).
-        RagSearchError: If parser fails (unstructured path only).
+        NoDataFoundError: If no data found:
+            - Structured: Empty file
+            - Unstructured: Parser returns no documents or all content is empty
+        ValueError: If CSV/JSON/Parquet file format is invalid (structured path only).
+        RagSearchError: If unstructured parser fails (UnsupportedFileTypeError, ParsingError, etc.).
         RuntimeError: For other data loading, Cohere client, or vector database errors.
     """
     print("Starting setup of the RAG Search Engine...")
 
-    # Validate data path
+    # Validate data_path type
+    if not isinstance(data_path, Path):
+        raise TypeError(f"data_path must be Path object, got {type(data_path).__name__}")
+    
+    # Validate data path exists
     if not data_path.exists():
         raise FileNotFoundError(f"Data path does not exist: {data_path}")
 
-    # Load data
+    # Load data with specific error handling
     try:
-        # Get file name of the data_path
-        file_name = data_path.name
         if data_path.suffix in STRUCTURED_EXTENSIONS:
             data = _load_structured_data(data_path)
         else:
             data = _load_unstructured_data(data_path)
     except RagSearchError:
+        # Preserve RagSearchError from parser (NoDataFoundError, ParsingError, etc.)
         raise
+    except ValueError as e:
+        # ValueError from _load_structured_data or invalid document structure
+        raise ValueError(f"Failed to load data: {e}") from e
     except Exception as e:
-        raise RuntimeError(f"Failed to load data: {e}")
+        raise RuntimeError(f"Failed to load data: {e}") from e
 
     if data.empty:
         raise NoDataFoundError(f"No data found in input file: {data_path}")
 
+    # Get file name for logging/engine initialization
+    file_name = data_path.name
+    
     # Initialize Cohere client
     try:
         llm_client = CohereClient(api_key=llm_api_key)
