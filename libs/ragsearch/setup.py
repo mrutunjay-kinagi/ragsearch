@@ -22,6 +22,7 @@ import os
 from pathlib import Path
 import pandas as pd
 from cohere import Client as CohereClient
+from .errors import NoDataFoundError
 from .vector_db import VectorDB, query_chromadb
 from .engine import RagSearchEngine
 
@@ -64,6 +65,9 @@ def setup(data_path: Path,
             raise ValueError(f"Unsupported file type: {data_path.suffix}")
     except Exception as e:
         raise RuntimeError(f"Failed to load data: {e}")
+
+    if data.empty:
+        raise NoDataFoundError(f"No data found in input file: {data_path}")
 
     # Initialize Cohere client
     try:

@@ -6,6 +6,7 @@ import logging
 from typing import List, Dict
 import pandas as pd
 from cohere import Client as CohereClient
+from .errors import NoDataFoundError
 from .utils import (extract_textual_columns,
                     preprocess_search_text,
                     preprocess_text,
@@ -52,6 +53,9 @@ class RagSearchEngine:
         self.file_name = file_name
         self.chromadb_sqlite_path = chromadb_sqlite_path
         self.chromadb_collection_name = chromadb_collection_name
+
+        if self.data.empty:
+            raise NoDataFoundError("No data found in the provided DataFrame.")
 
         # Ensure the embeddings directory exists
         self.save_dir.mkdir(parents=True, exist_ok=True)

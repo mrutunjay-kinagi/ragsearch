@@ -14,6 +14,10 @@ class RagSearchError(Exception):
         self.cause = cause
 
 
+class NoDataFoundError(RagSearchError):
+    """Raised when an operation requires data but none is available."""
+
+
 class ParsingError(RagSearchError):
     """Base error for parser failures."""
 
