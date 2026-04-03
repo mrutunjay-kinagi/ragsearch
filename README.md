@@ -6,6 +6,7 @@
 - Seamless integration with the Cohere AI LLM for generating embeddings.
 - Utilizes FAISS for fast, in-memory vector storage and similarity search.
 - Optional ChromaDB backend for persistent, scalable vector search using SQLite.
+- Unstructured ingestion support through LiteParse (with Python fallback parsers).
 - Easy setup and configuration for different use cases.
 - Simple web interface for user interaction.
 
@@ -28,9 +29,23 @@ Ensure that you have all necessary dependencies installed:
 pip install pandas faiss-cpu flask cohere chromadb
 ```
 
+For richer unstructured parsing support (HTML/PDF/DOCX fallback):
+
+```bash
+pip install beautifulsoup4 pypdf python-docx
+```
+
+For LiteParse support, ensure Node.js 18+ and npx are available:
+
+```bash
+node --version
+npx --version
+npx --yes @run-llama/liteparse --help
+```
+
 ## Basic Setup
 ### Step 1: Prepare Your Data
-Ensure you have your structured data in a CSV, JSON, or Parquet format. The data should include columns for the main content and any relevant metadata.
+Ensure you have your data in a supported format. Structured files (CSV/JSON/Parquet) are loaded with pandas. Unstructured files are parsed via LiteParse when available, otherwise fallback parsers are used.
 
 **Example data (`sample_data.csv`)**:
 ```csv
@@ -79,6 +94,27 @@ rag_engine = setup(
     chromadb_collection_name=chromadb_collection_name
 )
 ```
+
+### Step 2b: Unstructured File Ingestion (PDF/DOCX/TXT/HTML)
+
+Use the same `setup()` API for unstructured files:
+
+```python
+from pathlib import Path
+from ragsearch import setup
+
+data_path = Path("path/to/your/report.pdf")
+llm_api_key = "your-cohere-api-key"
+
+rag_engine = setup(data_path, llm_api_key)
+```
+
+Parser selection behavior:
+- LiteParse is preferred when available (Node.js + npx installed).
+- If LiteParse is unavailable, fallback parser is used for supported file types.
+- Unsupported types raise `UnsupportedFileTypeError`.
+
+Note: supported extensions can be backend-dependent. LiteParse supports additional types such as `.doc`, `.png`, `.jpg`, and `.jpeg`, while fallback parsing is intentionally narrower.
 
 ### Step 3: Run a Search Query
 Once the `ragsearch` is initialized, you can perform natural language searches.
@@ -136,6 +172,23 @@ Edit `index.html` in the `templates` directory to adjust the UI layout or add mo
 ## Troubleshooting
 - **`AssertionError: d == self.d`**: Ensure the embedding dimension (`embedding_dim`) matches the output dimension from your embedding model.
 - **`TypeError: embed() takes 1 positional argument`**: Use the correct keyword argument format for `embed()` based on your `cohere` version.
+
+### Parser Pipeline Troubleshooting (Issue #18 Slice 3)
+
+| Error | Typical Cause | Resolution |
+| --- | --- | --- |
+| `ParserUnavailableError: LiteParse CLI not found` | Node.js/npx not installed, or custom CLI path invalid | Install Node.js 18+, verify `npx` works, or set `RAGSEARCH_LITEPARSE_CLI` to a valid executable |
+| `ParseTimeoutError` | Large/complex document exceeded parse timeout | Retry with smaller file; timeout tuning via `LiteParseAdapter(timeout_s=...)` applies to custom parser flows, not the default `setup()` path |
+| `ParseCorruptError` | Corrupt file or invalid parser output payload | Validate file integrity and retry; inspect parser output/logs |
+| `UnsupportedFileTypeError` | Extension not supported by the active parser backend | Convert to a supported format; fallback supports `.txt/.md/.html/.htm/.pdf/.docx`, LiteParse supports additional formats |
+| `NoDataFoundError` | File parsed but content was empty/whitespace only | Verify source file contains readable text content |
+
+### Performance Notes
+
+- Structured files (CSV/JSON/Parquet) are typically fastest because they bypass parser dispatch.
+- Unstructured parsing performance depends on document size and parser backend.
+- Very large PDFs/DOCX files can trigger timeout paths; use smaller batches/files where possible.
+- Empty/whitespace-only parsed documents are filtered before indexing to preserve retrieval quality.
 
 ## Deployment Tips
 - **Deploying to a Server**: Use services like Heroku, AWS, or Docker.

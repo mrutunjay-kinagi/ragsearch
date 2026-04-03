@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from libs.ragsearch.errors import NoDataFoundError, RagSearchError
+from libs.ragsearch.errors import NoDataFoundError, ParseTimeoutError, RagSearchError
 from libs.ragsearch.parsers import ParsedDocument
 from libs.ragsearch.engine import RagSearchEngine
 from libs.ragsearch.setup import setup
@@ -140,6 +140,77 @@ def test_setup_unstructured_raises_no_data_when_parser_returns_empty(tmp_path, m
             return iter([])
 
     monkeypatch.setattr("libs.ragsearch.setup.get_parser", lambda *args, **kwargs: EmptyParser())
+
+    with pytest.raises(NoDataFoundError, match="No data found"):
+        setup(Path(data_path), llm_api_key="test-key")
+
+
+def test_setup_unstructured_filters_whitespace_documents(tmp_path, monkeypatch):
+    data_path = tmp_path / "sample.txt"
+    data_path.write_text("hello", encoding="utf-8")
+
+    class DummyCohereClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    class DummyVectorDB:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    captured = {}
+
+    class DummyEngine:
+        def __init__(self, *args, **kwargs):
+            captured["data"] = kwargs["data"]
+
+    class FakeParser:
+        def parse(self, path):
+            return iter(
+                [
+                    ParsedDocument(text="   ", metadata={}, source_path=str(path), parser_name="fake"),
+                    ParsedDocument(text="kept", metadata={}, source_path=str(path), parser_name="fake"),
+                ]
+            )
+
+    monkeypatch.setattr("libs.ragsearch.setup.CohereClient", DummyCohereClient)
+    monkeypatch.setattr("libs.ragsearch.setup.VectorDB", DummyVectorDB)
+    monkeypatch.setattr("libs.ragsearch.setup.RagSearchEngine", DummyEngine)
+    monkeypatch.setattr("libs.ragsearch.setup.get_parser", lambda *args, **kwargs: FakeParser())
+
+    setup(Path(data_path), llm_api_key="test-key")
+
+    assert captured["data"].shape[0] == 1
+    assert captured["data"].iloc[0]["text"] == "kept"
+
+
+def test_setup_unstructured_parser_timeout_propagates(tmp_path, monkeypatch):
+    data_path = tmp_path / "sample.txt"
+    data_path.write_text("hello", encoding="utf-8")
+
+    class TimeoutParser:
+        def parse(self, path):
+            raise ParseTimeoutError("timed out")
+
+    monkeypatch.setattr("libs.ragsearch.setup.get_parser", lambda *args, **kwargs: TimeoutParser())
+
+    with pytest.raises(ParseTimeoutError, match="timed out"):
+        setup(Path(data_path), llm_api_key="test-key")
+
+
+def test_setup_unstructured_all_whitespace_documents_raise_no_data(tmp_path, monkeypatch):
+    data_path = tmp_path / "sample.txt"
+    data_path.write_text("hello", encoding="utf-8")
+
+    class WhitespaceParser:
+        def parse(self, path):
+            return iter(
+                [
+                    ParsedDocument(text="  ", metadata={}, source_path=str(path), parser_name="fake"),
+                    ParsedDocument(text="\n\t", metadata={}, source_path=str(path), parser_name="fake"),
+                ]
+            )
+
+    monkeypatch.setattr("libs.ragsearch.setup.get_parser", lambda *args, **kwargs: WhitespaceParser())
 
     with pytest.raises(NoDataFoundError, match="No data found"):
         setup(Path(data_path), llm_api_key="test-key")

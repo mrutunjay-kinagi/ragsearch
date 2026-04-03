@@ -3,6 +3,7 @@ Tests for parser boundary contracts and fallback behavior.
 """
 
 from dataclasses import asdict
+import builtins
 import json
 from pathlib import Path
 
@@ -134,6 +135,46 @@ def test_liteparse_adapter_raises_timeout(monkeypatch, tmp_path):
         list(LiteParseAdapter().parse(path))
 
 
+def test_liteparse_adapter_timeout_configurable(monkeypatch, tmp_path):
+    path = tmp_path / "sample.txt"
+    path.write_text("ignored", encoding="utf-8")
+
+    class FakeCompletedProcess:
+        returncode = 0
+        stdout = json.dumps({"text": "ok"})
+        stderr = ""
+
+    captured = {}
+
+    def fake_run(*args, **kwargs):
+        captured["timeout"] = kwargs.get("timeout")
+        return FakeCompletedProcess()
+
+    monkeypatch.setattr(LiteParseAdapter, "available", classmethod(lambda cls: True))
+    monkeypatch.setattr("libs.ragsearch.parsers._liteparse.subprocess.run", fake_run)
+
+    documents = list(LiteParseAdapter(timeout_s=7).parse(path))
+
+    assert captured["timeout"] == 7
+    assert len(documents) == 1
+
+
+def test_liteparse_adapter_raises_for_empty_documents_list(monkeypatch, tmp_path):
+    path = tmp_path / "sample.txt"
+    path.write_text("ignored", encoding="utf-8")
+
+    class FakeCompletedProcess:
+        returncode = 0
+        stdout = json.dumps({"documents": []})
+        stderr = ""
+
+    monkeypatch.setattr(LiteParseAdapter, "available", classmethod(lambda cls: True))
+    monkeypatch.setattr("libs.ragsearch.parsers._liteparse.subprocess.run", lambda *args, **kwargs: FakeCompletedProcess())
+
+    with pytest.raises(ParseCorruptError, match="did not contain documents"):
+        list(LiteParseAdapter().parse(path))
+
+
 def test_liteparse_adapter_raises_for_invalid_document_shapes(monkeypatch, tmp_path):
     path = tmp_path / "sample.txt"
     path.write_text("ignored", encoding="utf-8")
@@ -256,6 +297,59 @@ def test_get_parser_prefers_liteparse_when_available(monkeypatch, tmp_path):
     parser = get_parser(path)
 
     assert isinstance(parser, LiteParseAdapter)
+
+
+def test_liteparse_available_honors_env_cli_path(monkeypatch, tmp_path):
+    cli_path = tmp_path / "liteparse-cli"
+    cli_path.write_text("#!/bin/sh\necho ok", encoding="utf-8")
+
+    monkeypatch.setenv(LiteParseAdapter.ENV_CLI_PATH, str(cli_path))
+    monkeypatch.setattr("libs.ragsearch.parsers._liteparse.shutil.which", lambda _: None)
+
+    assert LiteParseAdapter.available() is True
+
+
+def test_fallback_parser_empty_txt_file_yields_no_documents(tmp_path):
+    path = tmp_path / "empty.txt"
+    path.write_text("   \n", encoding="utf-8")
+
+    documents = list(FallbackParser().parse(path))
+
+    assert documents == []
+
+
+def test_fallback_parser_docx_missing_raises_unavailable(monkeypatch, tmp_path):
+    path = tmp_path / "sample.docx"
+    path.write_text("fake", encoding="utf-8")
+
+    original_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "docx":
+            raise ImportError("missing docx")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    with pytest.raises(ParserUnavailableError, match="python-docx"):
+        list(FallbackParser().parse(path))
+
+
+def test_fallback_parser_html_missing_bs4_raises_unavailable(monkeypatch, tmp_path):
+    path = tmp_path / "sample.html"
+    path.write_text("<p>hello</p>", encoding="utf-8")
+
+    original_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "bs4":
+            raise ImportError("missing bs4")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    with pytest.raises(ParserUnavailableError, match="beautifulsoup4"):
+        list(FallbackParser().parse(path))
 
 
 def test_get_parser_falls_back_when_liteparse_unavailable(monkeypatch, tmp_path):
