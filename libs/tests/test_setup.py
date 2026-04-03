@@ -8,6 +8,7 @@ import pandas as pd
 import pytest
 
 from libs.ragsearch.errors import NoDataFoundError, RagSearchError
+from libs.ragsearch.parsers import ParsedDocument
 from libs.ragsearch.engine import RagSearchEngine
 from libs.ragsearch.setup import setup
 
@@ -58,3 +59,87 @@ def test_engine_raises_no_data_found_for_empty_dataframe(tmp_path, monkeypatch):
             vector_db=None,
             save_dir=str(tmp_path / "embeddings"),
         )
+
+
+def test_setup_structured_path_skips_parser(tmp_path, monkeypatch):
+    data_path = tmp_path / "sample.csv"
+    data_path.write_text("name,description\na,b\n", encoding="utf-8")
+
+    class DummyCohereClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    class DummyVectorDB:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    class DummyEngine:
+        def __init__(self, *args, **kwargs):
+            self.kwargs = kwargs
+
+    def fail_if_parser_called(*args, **kwargs):
+        raise AssertionError("get_parser should not be called for structured inputs")
+
+    monkeypatch.setattr("libs.ragsearch.setup.CohereClient", DummyCohereClient)
+    monkeypatch.setattr("libs.ragsearch.setup.VectorDB", DummyVectorDB)
+    monkeypatch.setattr("libs.ragsearch.setup.RagSearchEngine", DummyEngine)
+    monkeypatch.setattr("libs.ragsearch.setup.get_parser", fail_if_parser_called)
+
+    engine = setup(Path(data_path), llm_api_key="test-key")
+    assert isinstance(engine, DummyEngine)
+
+
+def test_setup_unstructured_path_uses_parser(tmp_path, monkeypatch):
+    data_path = tmp_path / "sample.txt"
+    data_path.write_text("hello", encoding="utf-8")
+
+    class DummyCohereClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    class DummyVectorDB:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    captured = {}
+
+    class DummyEngine:
+        def __init__(self, *args, **kwargs):
+            captured["data"] = kwargs["data"]
+
+    class FakeParser:
+        def parse(self, path):
+            return iter(
+                [
+                    ParsedDocument(
+                        text="parsed text",
+                        metadata={"source": "fixture"},
+                        source_path=str(path),
+                        parser_name="fallback/plain_text",
+                    )
+                ]
+            )
+
+    monkeypatch.setattr("libs.ragsearch.setup.CohereClient", DummyCohereClient)
+    monkeypatch.setattr("libs.ragsearch.setup.VectorDB", DummyVectorDB)
+    monkeypatch.setattr("libs.ragsearch.setup.RagSearchEngine", DummyEngine)
+    monkeypatch.setattr("libs.ragsearch.setup.get_parser", lambda *args, **kwargs: FakeParser())
+
+    setup(Path(data_path), llm_api_key="test-key")
+
+    assert not captured["data"].empty
+    assert captured["data"].iloc[0]["text"] == "parsed text"
+
+
+def test_setup_unstructured_raises_no_data_when_parser_returns_empty(tmp_path, monkeypatch):
+    data_path = tmp_path / "sample.txt"
+    data_path.write_text("hello", encoding="utf-8")
+
+    class EmptyParser:
+        def parse(self, path):
+            return iter([])
+
+    monkeypatch.setattr("libs.ragsearch.setup.get_parser", lambda *args, **kwargs: EmptyParser())
+
+    with pytest.raises(NoDataFoundError, match="No data found"):
+        setup(Path(data_path), llm_api_key="test-key")
