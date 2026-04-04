@@ -30,7 +30,12 @@ class DummyEmbeddingModel:
 
 
 class DummyLLMClient:
-    pass
+    def __init__(self):
+        self.prompts = []
+
+    def generate(self, prompt, **kwargs):
+        self.prompts.append(prompt)
+        return "grounded answer"
 
 
 def _make_engine():
@@ -190,3 +195,43 @@ def test_search_raises_value_error_for_invalid_embedding_response():
         raise AssertionError("Expected ValueError for invalid embedding response")
     except ValueError as exc:
         assert "embeddings" in str(exc).lower()
+
+
+def test_build_answer_context_formats_retrieved_sources():
+    results = [
+        {
+            "metadata": {"text": "Alpha document content"},
+            "citation": {"source_path": "/docs/alpha.txt", "parser_name": "fallback/plain_text", "excerpt": "Alpha document content"},
+            "similarity": 0.93,
+        }
+    ]
+
+    context = RagSearchEngine._build_answer_context(results)
+
+    assert "[1] source_path: /docs/alpha.txt" in context
+    assert "parser_name: fallback/plain_text" in context
+    assert "similarity: 0.9300" in context
+    assert "excerpt: Alpha document content" in context
+
+
+def test_answer_returns_structured_output_with_preserved_citations():
+    engine = _make_engine()
+
+    payload = engine.answer("alpha", top_k=1)
+
+    assert payload["question"] == "alpha"
+    assert payload["answer"] == "grounded answer"
+    assert len(payload["results"]) == 1
+    assert payload["citations"] == [payload["results"][0]["citation"]]
+    assert "Question: alpha" in engine.llm_client.prompts[0]
+    assert "Sources:" in engine.llm_client.prompts[0]
+    assert "[1] source_path: /docs/alpha.txt" in engine.llm_client.prompts[0]
+
+
+def test_build_answer_prompt_mentions_grounding_rules():
+    prompt = RagSearchEngine._build_answer_prompt("What is alpha?", [])
+
+    assert "Answer only from the provided sources." in prompt
+    assert "If the sources are insufficient, say you do not know." in prompt
+    assert "Question: What is alpha?" in prompt
+    assert "(no sources retrieved)" in prompt
