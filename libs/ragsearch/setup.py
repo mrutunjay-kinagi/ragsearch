@@ -21,6 +21,7 @@ The returned RagSearchEngine instance will use the selected backend for queries.
 import os
 import logging
 from pathlib import Path
+from typing import Optional
 import pandas as pd
 from cohere import Client as CohereClient
 from .errors import NoDataFoundError, ParsingError, RagSearchError
@@ -51,7 +52,15 @@ def _load_structured_data(data_path: Path) -> pd.DataFrame:
     raise ValueError(f"Unsupported file type: {data_path.suffix}")
 
 
-def _load_unstructured_data(data_path: Path) -> pd.DataFrame:
+def _parser_label(parser) -> str:
+    if isinstance(parser, LiteParseAdapter):
+        return "liteparse"
+    if isinstance(parser, FallbackParser):
+        return "fallback"
+    return parser.__class__.__name__.lower()
+
+
+def _load_unstructured_data(data_path: Path, diagnostics: Optional[dict] = None) -> pd.DataFrame:
     """
     Load unstructured data (text, PDF, DOCX, etc.) by dispatching to parser via get_parser().
     
@@ -68,6 +77,8 @@ def _load_unstructured_data(data_path: Path) -> pd.DataFrame:
     Integration point: Slice 1 parser contract (see docs/adr/ADR-0000-top-10-architecture-questions.md).
     """
     parser = get_parser(data_path)
+    if diagnostics is not None:
+        diagnostics["selected_parser"] = _parser_label(parser)
     try:
         documents = list(parser.parse(data_path))
     except ParsingError as exc:
@@ -76,6 +87,10 @@ def _load_unstructured_data(data_path: Path) -> pd.DataFrame:
             fallback = FallbackParser()
             if fallback.supports(data_path):
                 logger.warning("LiteParse parsing failed; using fallback parser: %s", exc)
+                if diagnostics is not None:
+                    diagnostics["status"] = "recovered_with_fallback"
+                    diagnostics["failure_reason"] = str(exc)
+                    diagnostics["selected_parser"] = _parser_label(fallback)
                 try:
                     documents = list(fallback.parse(data_path))
                 except ParsingError as fallback_exc:
@@ -158,12 +173,20 @@ def setup(data_path: Path,
     if not data_path.exists():
         raise FileNotFoundError(f"Data path does not exist: {data_path}")
 
+    ingestion_diagnostics = {
+        "source_path": str(data_path),
+        "selected_parser": "",
+        "status": "success",
+        "failure_reason": "",
+    }
+
     # Load data with specific error handling
     try:
         if data_path.suffix in STRUCTURED_EXTENSIONS:
+            ingestion_diagnostics["selected_parser"] = "structured/pandas"
             data = _load_structured_data(data_path)
         else:
-            data = _load_unstructured_data(data_path)
+            data = _load_unstructured_data(data_path, diagnostics=ingestion_diagnostics)
     except RagSearchError:
         # Preserve RagSearchError from parser (NoDataFoundError, ParsingError, etc.)
         raise
@@ -220,4 +243,5 @@ def setup(data_path: Path,
         )
 
     print("Setup complete.")
+    engine.ingestion_diagnostics = ingestion_diagnostics
     return engine

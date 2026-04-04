@@ -18,11 +18,13 @@ Issue #18 introduced parser boundary abstractions and setup-path integration for
 5. `setup()` routes structured files through pandas and unstructured files through parser dispatch.
 6. Empty or whitespace-only parsed content is filtered before indexing.
 7. Parser failures surface typed `RagSearchError` subclasses for predictable handling.
+8. `setup()` publishes deterministic per-file ingestion diagnostics on the engine (`ingestion_diagnostics`) with parser selection, status, and fallback failure reason.
 
 ## Consequences
 - Better extraction quality for complex formats when LiteParse is available.
 - Graceful degradation when LiteParse or optional parser dependencies are missing.
 - Improved runtime resiliency when LiteParse fails after selection and fallback can parse the same file type.
+- Improved operational clarity through deterministic ingestion diagnostics for each setup input.
 - Deterministic error handling for timeout, corruption, unsupported type, and unavailable parser cases.
 - Existing structured ingestion flows remain unchanged.
 
