@@ -214,3 +214,160 @@ def test_setup_unstructured_all_whitespace_documents_raise_no_data(tmp_path, mon
 
     with pytest.raises(NoDataFoundError, match="No data found"):
         setup(Path(data_path), llm_api_key="test-key")
+
+
+def test_setup_uses_embedding_dimension_from_model(tmp_path, monkeypatch):
+    data_path = tmp_path / "sample.csv"
+    data_path.write_text("name,description\na,b\n", encoding="utf-8")
+
+    class DummyCohereClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def embed(self, texts):
+            class Resp:
+                embeddings = [[0.1, 0.2, 0.3]]
+
+            return Resp()
+
+    captured = {}
+
+    class CapturingVectorDB:
+        def __init__(self, embedding_dim):
+            captured["embedding_dim"] = embedding_dim
+
+    class DummyEngine:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    monkeypatch.setattr("libs.ragsearch.setup.CohereClient", DummyCohereClient)
+    monkeypatch.setattr("libs.ragsearch.setup.VectorDB", CapturingVectorDB)
+    monkeypatch.setattr("libs.ragsearch.setup.RagSearchEngine", DummyEngine)
+
+    setup(Path(data_path), llm_api_key="test-key")
+
+    assert captured["embedding_dim"] == 3
+
+
+def test_setup_falls_back_to_legacy_dimension_when_probe_shape_is_invalid(tmp_path, monkeypatch):
+    data_path = tmp_path / "sample.csv"
+    data_path.write_text("name,description\na,b\n", encoding="utf-8")
+
+    class DummyCohereClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def embed(self, texts):
+            return object()
+
+    captured = {}
+
+    class CapturingVectorDB:
+        def __init__(self, embedding_dim):
+            captured["embedding_dim"] = embedding_dim
+
+    class DummyEngine:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    monkeypatch.setattr("libs.ragsearch.setup.CohereClient", DummyCohereClient)
+    monkeypatch.setattr("libs.ragsearch.setup.VectorDB", CapturingVectorDB)
+    monkeypatch.setattr("libs.ragsearch.setup.RagSearchEngine", DummyEngine)
+
+    setup(Path(data_path), llm_api_key="test-key")
+
+    assert captured["embedding_dim"] == 4096
+
+
+def test_setup_falls_back_to_legacy_dimension_when_probe_runtime_fails(tmp_path, monkeypatch):
+    data_path = tmp_path / "sample.csv"
+    data_path.write_text("name,description\na,b\n", encoding="utf-8")
+
+    class DummyCohereClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def embed(self, texts):
+            raise RuntimeError("provider temporarily unavailable")
+
+    captured = {}
+
+    class CapturingVectorDB:
+        def __init__(self, embedding_dim):
+            captured["embedding_dim"] = embedding_dim
+
+    class DummyEngine:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    monkeypatch.setattr("libs.ragsearch.setup.CohereClient", DummyCohereClient)
+    monkeypatch.setattr("libs.ragsearch.setup.VectorDB", CapturingVectorDB)
+    monkeypatch.setattr("libs.ragsearch.setup.RagSearchEngine", DummyEngine)
+
+    setup(Path(data_path), llm_api_key="test-key")
+
+    assert captured["embedding_dim"] == 4096
+
+
+def test_setup_uses_backend_factory_for_vector_backend(tmp_path, monkeypatch):
+    data_path = tmp_path / "sample.csv"
+    data_path.write_text("name,description\na,b\n", encoding="utf-8")
+
+    class DummyCohereClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def embed(self, texts):
+            class Resp:
+                embeddings = [[0.1, 0.2, 0.3]]
+
+            return Resp()
+
+    sentinel_backend = object()
+    captured = {}
+
+    def fake_build_vector_backend(*, embedding_dim):
+        captured["embedding_dim"] = embedding_dim
+        return sentinel_backend
+
+    class DummyEngine:
+        def __init__(self, *args, **kwargs):
+            captured["vector_db"] = kwargs["vector_db"]
+
+    monkeypatch.setattr("libs.ragsearch.setup.CohereClient", DummyCohereClient)
+    monkeypatch.setattr("libs.ragsearch.setup.build_vector_backend", fake_build_vector_backend)
+    monkeypatch.setattr("libs.ragsearch.setup.RagSearchEngine", DummyEngine)
+
+    setup(Path(data_path), llm_api_key="test-key")
+
+    assert captured["embedding_dim"] == 3
+    assert captured["vector_db"] is sentinel_backend
+
+
+def test_setup_wraps_llm_client_with_protocol_adapter(tmp_path, monkeypatch):
+    data_path = tmp_path / "sample.csv"
+    data_path.write_text("name,description\na,b\n", encoding="utf-8")
+
+    class DummyCohereClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def embed(self, texts):
+            class Resp:
+                embeddings = [[0.1, 0.2, 0.3]]
+
+            return Resp()
+
+    captured = {}
+
+    class DummyEngine:
+        def __init__(self, *args, **kwargs):
+            captured["llm_client"] = kwargs["llm_client"]
+
+    monkeypatch.setattr("libs.ragsearch.setup.CohereClient", DummyCohereClient)
+    monkeypatch.setattr("libs.ragsearch.setup.build_vector_backend", lambda **kwargs: object())
+    monkeypatch.setattr("libs.ragsearch.setup.RagSearchEngine", DummyEngine)
+
+    setup(Path(data_path), llm_api_key="test-key")
+
+    assert hasattr(captured["llm_client"], "generate")

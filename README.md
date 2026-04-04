@@ -173,7 +173,19 @@ poetry run pytest
 To use ChromaDB, set `use_chromadb=True` and provide the path to your ChromaDB SQLite file and collection name. This enables persistent, scalable vector search.
 
 ### Changing the Embedding Model
-Modify the `llm_model_name` parameter in `setup()` to use different models, e.g., "large" or "small".
+`setup()` now uses an embedding-model contract internally.
+
+Expected embed response contract:
+- The embedding provider must support `embed(texts=[...])`.
+- The response must contain an `embeddings` attribute.
+- `embeddings` must be a non-empty sequence of numeric vectors.
+
+Dimension behavior:
+- `setup()` probes the embedding model to infer vector dimension automatically.
+- If probe-time inference fails (invalid response shape or transient provider error), `setup()` falls back to legacy dimension `4096` for backward compatibility.
+
+Migration note for custom providers:
+- If you use a custom embedding client, ensure response shape follows the contract above to avoid `ValueError` during indexing/search normalization.
 
 ### Adding More Metadata
 Include additional columns in your data for more detailed results.
@@ -182,8 +194,9 @@ Include additional columns in your data for more detailed results.
 Edit `index.html` in the `templates` directory to adjust the UI layout or add more user features.
 
 ## Troubleshooting
-- **`AssertionError: d == self.d`**: Ensure the embedding dimension (`embedding_dim`) matches the output dimension from your embedding model.
+- **`AssertionError: d == self.d`**: Embedding/vector dimensions are typically inferred automatically. If this appears with custom providers, verify your embed response contains consistent numeric vectors in `response.embeddings`.
 - **`TypeError: embed() takes 1 positional argument`**: Use the correct keyword argument format for `embed()` based on your `cohere` version.
+- **`ValueError: Embedding response must contain an 'embeddings' attribute`**: Your embedding provider response shape does not match the A1 contract; return an object with an `embeddings` sequence.
 
 ### Parser Pipeline Troubleshooting (Issue #18 Slice 3)
 

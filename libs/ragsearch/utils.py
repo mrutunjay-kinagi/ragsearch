@@ -3,6 +3,7 @@ Utility functions for the ragsearch package.
 """
 import pandas as pd
 import logging
+from .embedding_models import extract_embeddings
 
 
 # Configure logging
@@ -44,7 +45,7 @@ def batch_generate_embeddings(embedding_model, texts: list) -> list:
     """
     try:
         response = embedding_model.embed(texts=texts)
-        embeddings = response.embeddings
+        embeddings = extract_embeddings(response)
         logging.info("Generated embeddings successfully.")
         return embeddings
     except Exception as e:
