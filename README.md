@@ -219,17 +219,44 @@ HTTP API note:
 - `POST /query` remains backward-compatible and continues to return search results only
 
 Observability events:
-- `rag_engine.observability_events` stores structured events emitted during indexing, retrieval, and generation.
+- `rag_engine.observability_events` stores structured events emitted during retrieval and generation.
+- Indexing event emission is backend-dependent: FAISS/in-process indexing emits `indexing_completed`; ChromaDB mode does not emit an indexing event because indexing is handled outside the in-process FAISS embedding path.
 - Retrieval events include deterministic payload fields: `query`, `top_k`, `results_count`, `latency_ms`.
 - Generation events include deterministic payload fields: `query`, `top_k`, `results_count`, `citations_count`, `latency_ms`.
+- Configure `observability_max_events` in `setup(...)` to cap retained in-memory events for long-lived processes.
 
 Evaluation harness baseline:
-- Use `libs.ragsearch.evaluation.run_regression_gates(...)` to run deterministic pass/fail gates over a fixed case set.
+- Use `ragsearch.evaluation.run_regression_gates(...)` to run deterministic pass/fail gates over a fixed case set.
 - Default thresholds are configurable via `EvaluationThresholds(min_results=..., min_citations=...)`.
-- CI-ready deterministic command:
+- Baseline unit gate command:
 
 ```bash
 poetry run pytest libs/tests/test_evaluation.py -q
+```
+
+Evaluation quickstart:
+
+```python
+from pathlib import Path
+from ragsearch.evaluation import EvaluationThresholds, load_cases, run_regression_gates
+
+cases = load_cases(Path("libs/tests/eval_cases.json"))
+summary = run_regression_gates(
+        rag_engine,
+        cases,
+        EvaluationThresholds(min_results=1, min_citations=1),
+)
+
+print(summary["pass"], summary["passed_cases"], summary["failed_cases"])
+```
+
+Evaluation CLI:
+
+```bash
+python -m ragsearch.evaluation \
+    --engine-factory your_project.bootstrap.build_engine \
+    --cases libs/tests/eval_cases.json \
+    --summary-only
 ```
 
 ## Running the Web Interface

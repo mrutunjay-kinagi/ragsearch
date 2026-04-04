@@ -159,6 +159,7 @@ def setup(data_path: Path,
           embeddings_dir: Optional[str] = None,
           chunking_strategy: Optional[ChunkingStrategy] = None,
           reranker: Optional[Reranker] = None,
+          observability_max_events: Optional[int] = 1000,
           embedding_provider: str = "cohere",
           embedding_model_name: Optional[str] = None,
           embedding_api_key: Optional[str] = None,
@@ -182,6 +183,7 @@ def setup(data_path: Path,
         embeddings_dir (str): Optional directory for local embedding manifest/cache files.
         chunking_strategy: Optional text chunking strategy for retrieval indexing.
         reranker: Optional result reranker applied after retrieval.
+        observability_max_events (Optional[int]): Maximum in-memory observability events retained by engine.
         embedding_provider (str): Embedding provider identifier (default: "cohere").
         embedding_model_name (str): Optional provider-specific model name.
         embedding_api_key (str): Optional API key for embedding provider; defaults to llm_api_key.
@@ -293,6 +295,7 @@ def setup(data_path: Path,
             save_dir=embeddings_dir or "embeddings",
             chunking_strategy=chunking_strategy,
             reranker=reranker,
+            observability_max_events=observability_max_events,
             chromadb_sqlite_path=chromadb_sqlite_path,
             chromadb_collection_name=chromadb_collection_name
         )
@@ -315,6 +318,7 @@ def setup(data_path: Path,
             save_dir=embeddings_dir or "embeddings",
             chunking_strategy=chunking_strategy,
             reranker=reranker,
+            observability_max_events=observability_max_events,
             file_name=file_name
         )
 

@@ -4,6 +4,7 @@ which is responsible for initializing the RAG Search Engine
 """
 import logging
 import hashlib
+import copy
 import json
 from time import perf_counter
 from typing import Any, Dict, List, Optional
@@ -51,6 +52,7 @@ class RagSearchEngine:
                  file_name: str = "data.csv",
                  chunking_strategy: Optional[ChunkingStrategy] = None,
                  reranker: Optional[Reranker] = None,
+                 observability_max_events: Optional[int] = 1000,
                  chromadb_sqlite_path: str = None,
                  chromadb_collection_name: str = None):
         """
@@ -74,6 +76,9 @@ class RagSearchEngine:
         self.file_name = file_name
         self.chunking_strategy = chunking_strategy or RowChunkingStrategy()
         self.reranker = reranker or NoOpReranker()
+        if observability_max_events is not None and observability_max_events <= 0:
+            raise ValueError("observability_max_events must be > 0 when provided")
+        self.observability_max_events = observability_max_events
         self.chromadb_sqlite_path = chromadb_sqlite_path
         self.chromadb_collection_name = chromadb_collection_name
         self.index_data = data
@@ -213,9 +218,12 @@ class RagSearchEngine:
         record = {
             "stage": stage,
             "event": event,
-            "payload": payload,
+            # Snapshot payload to keep historical events immutable for callers.
+            "payload": copy.deepcopy(payload),
         }
         self.observability_events.append(record)
+        if self.observability_max_events is not None and len(self.observability_events) > self.observability_max_events:
+            self.observability_events = self.observability_events[-self.observability_max_events:]
         logging.info("OBSERVABILITY %s", json.dumps(record, sort_keys=True))
 
     def _build_index_data(self, textual_columns: list) -> pd.DataFrame:

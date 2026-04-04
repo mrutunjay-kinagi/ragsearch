@@ -19,13 +19,13 @@ Introduce a baseline observability and evaluation contract:
 - Emit deterministic payload fields for retrieval and generation stages:
   - retrieval: `query`, `top_k`, `results_count`, `latency_ms`
   - generation: `query`, `top_k`, `results_count`, `citations_count`, `latency_ms`
-- Emit indexing completion event with ingestion/indexing diagnostic payload.
+- Emit indexing completion event with ingestion/indexing diagnostic payload for FAISS/in-process indexing path.
 - Extend setup diagnostics with deterministic `observability` metrics:
   - `setup_latency_ms`, `loaded_records`, `selected_parser`, `fallback_recovered`
-- Add evaluation harness module `libs/ragsearch/evaluation.py`:
+- Add evaluation harness module `ragsearch/evaluation.py`:
   - `run_regression_gates(engine, cases, thresholds)` returns deterministic summary
   - `EvaluationThresholds` supports minimum retrieval/citation guardrails
-- Gate baseline in CI with deterministic evaluation tests.
+- Gate baseline unit behavior in CI with deterministic evaluation tests.
 
 ## Consequences
 
@@ -37,7 +37,7 @@ Positive:
 
 Trade-offs:
 
-- In-memory event storage grows with engine usage unless reset by caller.
+- In-memory event storage grows with engine usage unless capped/configured by caller.
 - Baseline thresholds are intentionally simple and do not replace richer quality metrics.
 
 ## Verification
@@ -45,5 +45,6 @@ Trade-offs:
 Tests cover:
 
 - retrieval and generation event emission contracts in engine tests
+- indexing event emission contract for FAISS/in-process indexing path
 - setup ingestion diagnostics observability contract
-- evaluation harness pass/fail behavior with deterministic fake-engine cases
+- evaluation harness pass/fail and input-validation behavior with deterministic fake-engine cases

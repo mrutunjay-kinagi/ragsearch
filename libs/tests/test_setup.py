@@ -499,6 +499,8 @@ def test_setup_exposes_structured_ingestion_diagnostics(tmp_path, monkeypatch):
         },
         "indexing": {},
     }
+    assert isinstance(engine.ingestion_diagnostics["observability"]["metrics"]["setup_latency_ms"], float)
+    assert engine.ingestion_diagnostics["observability"]["metrics"]["setup_latency_ms"] >= 0
 
 
 def test_setup_unstructured_uses_fallback_when_liteparse_runtime_fails(tmp_path, monkeypatch, caplog):
@@ -561,6 +563,8 @@ def test_setup_unstructured_uses_fallback_when_liteparse_runtime_fails(tmp_path,
         },
         "indexing": {},
     }
+    assert isinstance(engine.ingestion_diagnostics["observability"]["metrics"]["setup_latency_ms"], float)
+    assert engine.ingestion_diagnostics["observability"]["metrics"]["setup_latency_ms"] >= 0
 
 
 def test_setup_unstructured_reraises_primary_error_when_fallback_also_fails(tmp_path, monkeypatch):
