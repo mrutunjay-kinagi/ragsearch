@@ -125,7 +125,15 @@ query = "Find recipes with chicken"
 results = rag_engine.search(query, top_k=5)
 
 for result in results:
-    print("Result:", result['metadata'])
+    print("Metadata:", result["metadata"])
+    print("Citation:", result["citation"])
+    print("Similarity:", result["similarity"])
+
+# citation fields:
+# - record_id: row/chunk index in the indexed dataset
+# - source_path: source file path when available
+# - parser_name: parser used during ingestion when available
+# - excerpt: up to 200 chars from text/combined_text
 ```
 
 ## Running the Web Interface
@@ -146,6 +154,10 @@ http://localhost:8080/
 - Enter a search query in the input field.
 - Click the **Submit** button.
 - View the results displayed on the page.
+
+API contract note for `/query`:
+- Default behavior is backward compatible and returns metadata-only results.
+- Set `include_details=true` in request JSON to return full objects with `metadata`, `citation`, and `similarity`.
 
 ## Testing the Package
 ### Running Unit Tests
