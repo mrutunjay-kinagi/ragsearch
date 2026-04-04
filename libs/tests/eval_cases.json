@@ -1,0 +1,8 @@
+[
+  {
+    "query": "alpha",
+    "top_k": 1,
+    "min_results": 1,
+    "min_citations": 1
+  }
+]

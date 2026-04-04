@@ -21,6 +21,7 @@ The returned RagSearchEngine instance will use the selected backend for queries.
 import os
 import logging
 from pathlib import Path
+from time import perf_counter
 from typing import Optional
 import pandas as pd
 from cohere import Client as CohereClient
@@ -158,6 +159,7 @@ def setup(data_path: Path,
           embeddings_dir: Optional[str] = None,
           chunking_strategy: Optional[ChunkingStrategy] = None,
           reranker: Optional[Reranker] = None,
+          observability_max_events: Optional[int] = 1000,
           embedding_provider: str = "cohere",
           embedding_model_name: Optional[str] = None,
           embedding_api_key: Optional[str] = None,
@@ -181,6 +183,7 @@ def setup(data_path: Path,
         embeddings_dir (str): Optional directory for local embedding manifest/cache files.
         chunking_strategy: Optional text chunking strategy for retrieval indexing.
         reranker: Optional result reranker applied after retrieval.
+        observability_max_events (Optional[int]): Maximum in-memory observability events retained by engine.
         embedding_provider (str): Embedding provider identifier (default: "cohere").
         embedding_model_name (str): Optional provider-specific model name.
         embedding_api_key (str): Optional API key for embedding provider; defaults to llm_api_key.
@@ -201,6 +204,7 @@ def setup(data_path: Path,
         RuntimeError: For other data loading, Cohere client, or vector database errors.
     """
     print("Starting setup of the RAG Search Engine...")
+    setup_started = perf_counter()
 
     # Validate data_path type
     if not isinstance(data_path, Path):
@@ -291,6 +295,7 @@ def setup(data_path: Path,
             save_dir=embeddings_dir or "embeddings",
             chunking_strategy=chunking_strategy,
             reranker=reranker,
+            observability_max_events=observability_max_events,
             chromadb_sqlite_path=chromadb_sqlite_path,
             chromadb_collection_name=chromadb_collection_name
         )
@@ -313,10 +318,22 @@ def setup(data_path: Path,
             save_dir=embeddings_dir or "embeddings",
             chunking_strategy=chunking_strategy,
             reranker=reranker,
+            observability_max_events=observability_max_events,
             file_name=file_name
         )
 
     print("Setup complete.")
+    setup_latency_ms = round((perf_counter() - setup_started) * 1000.0, 3)
+    ingestion_diagnostics["observability"] = {
+        "stage": "ingestion",
+        "event": "setup_completed",
+        "metrics": {
+            "setup_latency_ms": setup_latency_ms,
+            "loaded_records": int(len(data)),
+            "selected_parser": ingestion_diagnostics.get("selected_parser", ""),
+            "fallback_recovered": ingestion_diagnostics.get("status") == "recovered_with_fallback",
+        },
+    }
     ingestion_diagnostics["indexing"] = getattr(engine, "indexing_diagnostics", {})
     engine.ingestion_diagnostics = ingestion_diagnostics
     return engine

@@ -487,8 +487,20 @@ def test_setup_exposes_structured_ingestion_diagnostics(tmp_path, monkeypatch):
         "selected_parser": "structured/pandas",
         "status": "success",
         "failure_reason": "",
+        "observability": {
+            "stage": "ingestion",
+            "event": "setup_completed",
+            "metrics": {
+                "setup_latency_ms": engine.ingestion_diagnostics["observability"]["metrics"]["setup_latency_ms"],
+                "loaded_records": 1,
+                "selected_parser": "structured/pandas",
+                "fallback_recovered": False,
+            },
+        },
         "indexing": {},
     }
+    assert isinstance(engine.ingestion_diagnostics["observability"]["metrics"]["setup_latency_ms"], float)
+    assert engine.ingestion_diagnostics["observability"]["metrics"]["setup_latency_ms"] >= 0
 
 
 def test_setup_unstructured_uses_fallback_when_liteparse_runtime_fails(tmp_path, monkeypatch, caplog):
@@ -539,8 +551,20 @@ def test_setup_unstructured_uses_fallback_when_liteparse_runtime_fails(tmp_path,
         "selected_parser": "fallback",
         "status": "recovered_with_fallback",
         "failure_reason": "LiteParse timed out",
+        "observability": {
+            "stage": "ingestion",
+            "event": "setup_completed",
+            "metrics": {
+                "setup_latency_ms": engine.ingestion_diagnostics["observability"]["metrics"]["setup_latency_ms"],
+                "loaded_records": 1,
+                "selected_parser": "fallback",
+                "fallback_recovered": True,
+            },
+        },
         "indexing": {},
     }
+    assert isinstance(engine.ingestion_diagnostics["observability"]["metrics"]["setup_latency_ms"], float)
+    assert engine.ingestion_diagnostics["observability"]["metrics"]["setup_latency_ms"] >= 0
 
 
 def test_setup_unstructured_reraises_primary_error_when_fallback_also_fails(tmp_path, monkeypatch):

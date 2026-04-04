@@ -443,3 +443,73 @@ def test_search_applies_configured_reranker():
     assert len(reranked) == 2
     assert reranked[0]["citation"]["record_id"] == baseline[1]["citation"]["record_id"]
     assert reranked[1]["citation"]["record_id"] == baseline[0]["citation"]["record_id"]
+
+
+def test_search_emits_observability_metrics():
+    engine = _make_engine()
+
+    engine.search("alpha", top_k=1)
+
+    retrieval_events = [item for item in engine.observability_events if item["stage"] == "retrieval"]
+    assert len(retrieval_events) >= 1
+    payload = retrieval_events[-1]["payload"]
+    assert payload["query"] == "alpha"
+    assert payload["top_k"] == 1
+    assert payload["results_count"] == 1
+    assert payload["latency_ms"] >= 0
+
+
+def test_answer_emits_generation_observability_metrics():
+    engine = _make_engine()
+
+    payload = engine.answer("alpha", top_k=1)
+
+    generation_events = [item for item in engine.observability_events if item["stage"] == "generation"]
+    assert len(generation_events) >= 1
+    metrics = generation_events[-1]["payload"]
+    assert metrics["query"] == "alpha"
+    assert metrics["top_k"] == 1
+    assert metrics["results_count"] == 1
+    assert metrics["citations_count"] == len(payload["citations"])
+    assert metrics["latency_ms"] >= 0
+
+
+def test_engine_emits_indexing_observability_event_on_init():
+    engine = _make_engine()
+
+    indexing_events = [item for item in engine.observability_events if item["stage"] == "indexing"]
+    assert len(indexing_events) >= 1
+    metrics = indexing_events[-1]["payload"]
+    assert metrics["total_records"] >= 1
+    assert metrics["embedded_records"] >= 0
+
+
+def test_observability_event_retention_respects_max_events():
+    data = pd.DataFrame(
+        [
+            {
+                "text": "Alpha document content",
+                "source_path": "/docs/alpha.txt",
+                "parser_name": "fallback/plain_text",
+            },
+            {
+                "text": "Beta document content",
+                "source_path": "/docs/beta.txt",
+                "parser_name": "fallback/plain_text",
+            },
+        ]
+    )
+    engine = RagSearchEngine(
+        data=data,
+        embedding_model=DummyEmbeddingModel(),
+        llm_client=DummyLLMClient(),
+        vector_db=VectorDB(embedding_dim=4),
+        save_dir="embeddings/test_engine",
+        observability_max_events=2,
+    )
+
+    engine.search("alpha", top_k=1)
+    engine.answer("alpha", top_k=1)
+
+    assert len(engine.observability_events) == 2
+    assert engine.observability_events[-1]["stage"] == "generation"

@@ -4,7 +4,9 @@ which is responsible for initializing the RAG Search Engine
 """
 import logging
 import hashlib
+import copy
 import json
+from time import perf_counter
 from typing import Any, Dict, List, Optional
 import pandas as pd
 from .errors import NoDataFoundError
@@ -50,6 +52,7 @@ class RagSearchEngine:
                  file_name: str = "data.csv",
                  chunking_strategy: Optional[ChunkingStrategy] = None,
                  reranker: Optional[Reranker] = None,
+                 observability_max_events: Optional[int] = 1000,
                  chromadb_sqlite_path: str = None,
                  chromadb_collection_name: str = None):
         """
@@ -73,9 +76,13 @@ class RagSearchEngine:
         self.file_name = file_name
         self.chunking_strategy = chunking_strategy or RowChunkingStrategy()
         self.reranker = reranker or NoOpReranker()
+        if observability_max_events is not None and observability_max_events <= 0:
+            raise ValueError("observability_max_events must be > 0 when provided")
+        self.observability_max_events = observability_max_events
         self.chromadb_sqlite_path = chromadb_sqlite_path
         self.chromadb_collection_name = chromadb_collection_name
         self.index_data = data
+        self.observability_events: List[Dict[str, Any]] = []
         self.indexing_diagnostics = {
             "manifest_version": 1,
             "manifest_path": "",
@@ -201,6 +208,23 @@ class RagSearchEngine:
             "new_records": int(new_records),
             "changed_records": int(changed_records),
         }
+        self._emit_observability_event(
+            stage="indexing",
+            event="indexing_completed",
+            payload=self.indexing_diagnostics,
+        )
+
+    def _emit_observability_event(self, stage: str, event: str, payload: Dict[str, Any]):
+        record = {
+            "stage": stage,
+            "event": event,
+            # Snapshot payload to keep historical events immutable for callers.
+            "payload": copy.deepcopy(payload),
+        }
+        self.observability_events.append(record)
+        if self.observability_max_events is not None and len(self.observability_events) > self.observability_max_events:
+            self.observability_events = self.observability_events[-self.observability_max_events:]
+        logging.info("OBSERVABILITY %s", json.dumps(record, sort_keys=True))
 
     def _build_index_data(self, textual_columns: list) -> pd.DataFrame:
         rows = []
@@ -292,6 +316,7 @@ class RagSearchEngine:
         Returns:
             List[Dict]: A list of dictionaries containing metadata (excluding embeddings) and similarity scores for each result.
         """
+        search_started = perf_counter()
         try:
             logging.info(f"Processing search query: '{query}'")
 
@@ -337,6 +362,18 @@ class RagSearchEngine:
             reranked = self.reranker.rerank(query, enriched_results)
             if not isinstance(reranked, list):
                 raise ValueError("reranker must return a list of retrieval results")
+
+            latency_ms = round((perf_counter() - search_started) * 1000.0, 3)
+            self._emit_observability_event(
+                stage="retrieval",
+                event="search_completed",
+                payload={
+                    "query": query,
+                    "top_k": int(top_k),
+                    "results_count": int(len(reranked[:top_k])),
+                    "latency_ms": latency_ms,
+                },
+            )
 
             logging.info(f"Found {len(reranked)} results for the query after reranking.")
             return reranked[:top_k]
@@ -406,9 +443,23 @@ class RagSearchEngine:
 
     def answer(self, query: str, top_k: int = 5) -> Dict[str, Any]:
         """Generate a grounded answer with preserved retrieval citations."""
+        generation_started = perf_counter()
         results = self.search(query, top_k=top_k)
         prompt = self._build_answer_prompt(query, results)
         answer_text = self.llm_client.generate(prompt)
+        latency_ms = round((perf_counter() - generation_started) * 1000.0, 3)
+
+        self._emit_observability_event(
+            stage="generation",
+            event="answer_completed",
+            payload={
+                "query": query,
+                "top_k": int(top_k),
+                "results_count": int(len(results)),
+                "citations_count": int(len(results)),
+                "latency_ms": latency_ms,
+            },
+        )
 
         return {
             "question": query,
