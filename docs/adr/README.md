@@ -6,6 +6,7 @@ This folder stores Architecture Decision Records (ADRs) for ragsearch.
 
 - ADR-0002: document parsing pipeline
 - ADR-0003: embedding model abstraction
+- ADR-0004: llm provider registry/factory
 
 ## Conventions
 

@@ -26,7 +26,7 @@ import pandas as pd
 from cohere import Client as CohereClient
 from .errors import NoDataFoundError, ParsingError, RagSearchError
 from .embedding_models import create_embedding_model, infer_embedding_dimension
-from .llm_clients import CohereLLMClientAdapter
+from .llm_clients import create_llm_client
 from .parsers import FallbackParser, LiteParseAdapter, get_parser
 from .vector_db import VectorDB
 from .engine import RagSearchEngine
@@ -34,7 +34,22 @@ from .engine import RagSearchEngine
 
 # File types loaded directly via pandas (no parser dispatch needed)
 STRUCTURED_EXTENSIONS = {".csv", ".json", ".parquet", ".pq"}
+SUPPORTED_EMBEDDING_PROVIDERS = {"cohere", "openai", "ollama", "sentence_transformers"}
+SUPPORTED_LLM_PROVIDERS = {"cohere", "openai", "ollama"}
 logger = logging.getLogger(__name__)
+
+
+def _normalize_provider_name(provider: str) -> str:
+    return provider.strip().lower().replace("-", "_")
+
+
+def _validate_provider(provider: str, supported: set[str], kind: str) -> str:
+    normalized = _normalize_provider_name(provider)
+    if normalized not in supported:
+        raise ValueError(
+            f"Unsupported {kind} provider: {provider}. Supported providers: {', '.join(sorted(supported))}."
+        )
+    return normalized
 
 
 def build_vector_backend(*, embedding_dim: int):
@@ -141,7 +156,10 @@ def setup(data_path: Path,
           embedding_provider: str = "cohere",
           embedding_model_name: Optional[str] = None,
           embedding_api_key: Optional[str] = None,
-          embedding_base_url: Optional[str] = None):
+          embedding_base_url: Optional[str] = None,
+          llm_provider: str = "cohere",
+          llm_model_name: Optional[str] = None,
+          llm_base_url: Optional[str] = None):
     """
     Initializes the RAG search engine from structured or unstructured data.
 
@@ -159,6 +177,9 @@ def setup(data_path: Path,
         embedding_model_name (str): Optional provider-specific model name.
         embedding_api_key (str): Optional API key for embedding provider; defaults to llm_api_key.
         embedding_base_url (str): Optional base URL for provider endpoints (for OpenAI-compatible or Ollama hosts).
+        llm_provider (str): LLM provider identifier (default: "cohere").
+        llm_model_name (str): Optional provider-specific chat model name.
+        llm_base_url (str): Optional base URL for provider endpoints (for OpenAI-compatible or Ollama hosts).
     Returns:
         RagSearchEngine: The initialized RAG search engine.
     Raises:
@@ -209,21 +230,42 @@ def setup(data_path: Path,
 
     # Get file name for logging/engine initialization
     file_name = data_path.name
-    
-    # Initialize Cohere client
+
     try:
-        raw_llm_client = CohereClient(api_key=llm_api_key)
-        llm_client = CohereLLMClientAdapter(raw_llm_client)
+        llm_provider_name = _validate_provider(llm_provider, SUPPORTED_LLM_PROVIDERS, "LLM")
+    except ValueError as e:
+        raise RuntimeError(f"Failed to initialize LLM client: {e}") from e
+
+    try:
+        embedding_provider_name = _validate_provider(embedding_provider, SUPPORTED_EMBEDDING_PROVIDERS, "embedding")
+    except ValueError as e:
+        raise RuntimeError(f"Failed to initialize embedding model: {e}") from e
+
+    cohere_client = None
+    if llm_provider_name == "cohere" or embedding_provider_name == "cohere":
+        try:
+            cohere_client = CohereClient(api_key=llm_api_key)
+        except Exception as e:
+            raise RuntimeError(f"Failed to initialize Cohere client: {e}")
+
+    try:
+        llm_client = create_llm_client(
+            provider=llm_provider_name,
+            api_key=llm_api_key,
+            model=llm_model_name,
+            base_url=llm_base_url,
+            cohere_client=cohere_client,
+        )
     except Exception as e:
-        raise RuntimeError(f"Failed to initialize Cohere client: {e}")
+        raise RuntimeError(f"Failed to initialize LLM client: {e}") from e
 
     try:
         embedding_model = create_embedding_model(
-            provider=embedding_provider,
+            provider=embedding_provider_name,
             api_key=embedding_api_key or llm_api_key,
             model=embedding_model_name,
             base_url=embedding_base_url,
-            cohere_client=raw_llm_client if embedding_provider.strip().lower() == "cohere" else None,
+            cohere_client=cohere_client,
         )
     except Exception as e:
         raise RuntimeError(f"Failed to initialize embedding model: {e}") from e

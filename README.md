@@ -222,6 +222,36 @@ Optional dependencies for non-default providers:
 - `openai` for `openai`
 - `ollama` for `ollama`
 
+### Changing the LLM Provider
+`setup()` now uses a configurable LLM contract internally.
+
+Provider selection:
+- `llm_provider="cohere"` (default)
+- `llm_provider="openai"`
+- `llm_provider="ollama"`
+
+Optional provider settings:
+- `llm_model_name`: provider-specific chat model id
+- `llm_base_url`: custom endpoint URL (OpenAI-compatible/Ollama host)
+
+Example:
+```python
+rag_engine = setup(
+    data_path,
+    llm_api_key,
+    llm_provider="openai",
+    llm_model_name="gpt-4o-mini",
+    llm_base_url="https://api.openai.com/v1",
+)
+```
+
+Optional dependencies for non-default providers:
+- `openai` for `openai`
+- `ollama` for `ollama`
+
+Migration note:
+- Custom generation clients should return string output through the `generate(prompt, **kwargs)` contract to avoid runtime adaptation errors.
+
 ### Adding More Metadata
 Include additional columns in your data for more detailed results.
 
