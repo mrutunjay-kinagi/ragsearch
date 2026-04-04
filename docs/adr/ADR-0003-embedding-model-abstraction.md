@@ -26,9 +26,15 @@ Introduce an embedding boundary with three parts:
 - `extract_embeddings(response)` validates and normalizes embedding payloads.
 - `infer_embedding_dimension(model)` probes one deterministic input to infer vector dimension.
 
+4. Provider registry/factory
+- Add `create_embedding_model(...)` to build provider adapters from setup configuration.
+- Phase-1 providers: `cohere` (default), `sentence_transformers`, `openai`, `ollama`.
+- Unknown provider selection fails fast with deterministic configuration errors.
+
 Setup behavior:
 - Preferred path: infer dimension from probe response.
 - Compatibility fallback: if probe inference fails (invalid response shape or runtime provider error), use legacy dimension `4096` and continue.
+- Setup remains backward-compatible: default embedding provider is Cohere when no provider is configured.
 
 ## Consequences
 
@@ -36,10 +42,12 @@ Positive:
 - Clear contract for embedding providers.
 - Centralized validation for embedding payload shape.
 - Reduced direct coupling to a specific embedding client in engine/setup.
+- Additive path to multimodel embeddings without changing search/indexing call sites.
 
 Trade-offs:
 - Setup now performs a probe call to infer dimension.
 - Fallback to legacy dimension can defer certain dimension mismatch failures to runtime if provider output is inconsistent.
+- Optional provider SDKs become environment-dependent when non-default providers are selected.
 
 ## Validation and Test Mapping
 
