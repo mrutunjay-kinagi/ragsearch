@@ -22,6 +22,19 @@ from pathlib import Path
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class RagSearchEngine:
+    @staticmethod
+    def _normalize_optional_text(value) -> str:
+        """Normalize optional metadata text fields to stable API strings."""
+        if value is None:
+            return ""
+        # Handle pandas missing markers without introducing stringified 'nan'.
+        if pd.isna(value):
+            return ""
+        text = str(value).strip()
+        if text.lower() in {"none", "nan"}:
+            return ""
+        return text
+
     def __init__(self,
                  data: pd.DataFrame,
                  embedding_model: CohereClient,
@@ -144,15 +157,11 @@ class RagSearchEngine:
                 if "embedding" in metadata:
                     del metadata["embedding"]
 
-                source_path = metadata.get("source_path", "")
-                parser_name = metadata.get("parser_name", "")
-                if not isinstance(source_path, str):
-                    source_path = str(source_path)
-                if not isinstance(parser_name, str):
-                    parser_name = str(parser_name)
+                source_path = self._normalize_optional_text(metadata.get("source_path", ""))
+                parser_name = self._normalize_optional_text(metadata.get("parser_name", ""))
 
                 excerpt_source = metadata.get("text") or metadata.get("combined_text") or ""
-                excerpt = str(excerpt_source)[:200]
+                excerpt = "" if excerpt_source is None else str(excerpt_source)[:200]
 
                 citation = {
                     "record_id": int(index),
@@ -172,6 +181,19 @@ class RagSearchEngine:
         except Exception as e:
             logging.error(f"Search failed: {e}")
             raise
+
+    @staticmethod
+    def _serialize_query_results(results: List[Dict], include_details: bool = False) -> List[Dict]:
+        """
+        Serialize search results for API consumers.
+
+        Backward compatibility:
+        - Default returns metadata-only entries (legacy behavior).
+        - When include_details=True, returns full enriched results including citation and similarity.
+        """
+        if include_details:
+            return results
+        return [res.get("metadata", {}) for res in results]
 
     def run(self):
         """
@@ -206,8 +228,14 @@ class RagSearchEngine:
                 return jsonify({"error": "Query parameter is required"}), 400  # Return error if query is missing
 
             top_k = int(request_data.get('top_k', 5))
+            include_details_raw = request_data.get('include_details', False)
+            if isinstance(include_details_raw, str):
+                include_details = include_details_raw.strip().lower() in {'1', 'true', 'yes', 'on'}
+            else:
+                include_details = bool(include_details_raw)
             results = self.search(query, top_k=top_k)
-            return jsonify({"results": results})
+            serialized = self._serialize_query_results(results, include_details=include_details)
+            return jsonify({"results": serialized})
 
         # Run the Flask app on a separate thread
         threading.Thread(target=app.run, kwargs={"host": "0.0.0.0", "port": 8080, "use_reloader": False}).start()
