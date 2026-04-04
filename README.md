@@ -183,6 +183,28 @@ To use ChromaDB, set `use_chromadb=True` and provide the path to your ChromaDB S
 ### Changing the Embedding Model
 `setup()` now uses an embedding-model contract internally.
 
+Provider selection (config-driven via `setup()` params):
+- `embedding_provider="cohere"` (default)
+- `embedding_provider="sentence_transformers"`
+- `embedding_provider="openai"`
+- `embedding_provider="ollama"`
+
+Optional provider settings:
+- `embedding_model_name`: provider-specific model id
+- `embedding_api_key`: embedding provider key (defaults to `llm_api_key`)
+- `embedding_base_url`: custom endpoint URL (OpenAI-compatible/Ollama host)
+
+Example:
+```python
+rag_engine = setup(
+    data_path,
+    llm_api_key,
+    embedding_provider="openai",
+    embedding_model_name="text-embedding-3-small",
+    embedding_api_key="your-openai-key",
+)
+```
+
 Expected embed response contract:
 - The embedding provider must support `embed(texts=[...])`.
 - The response must contain an `embeddings` attribute.
@@ -194,6 +216,11 @@ Dimension behavior:
 
 Migration note for custom providers:
 - If you use a custom embedding client, ensure response shape follows the contract above to avoid `ValueError` during indexing/search normalization.
+
+Optional dependencies for non-default providers:
+- `sentence-transformers` for `sentence_transformers`
+- `openai` for `openai`
+- `ollama` for `ollama`
 
 ### Adding More Metadata
 Include additional columns in your data for more detailed results.

@@ -25,7 +25,7 @@ from typing import Optional
 import pandas as pd
 from cohere import Client as CohereClient
 from .errors import NoDataFoundError, ParsingError, RagSearchError
-from .embedding_models import CohereEmbeddingAdapter, infer_embedding_dimension
+from .embedding_models import create_embedding_model, infer_embedding_dimension
 from .llm_clients import CohereLLMClientAdapter
 from .parsers import FallbackParser, LiteParseAdapter, get_parser
 from .vector_db import VectorDB
@@ -137,7 +137,11 @@ def setup(data_path: Path,
           llm_api_key: str,
           use_chromadb: bool = False,
           chromadb_sqlite_path: str = None,
-          chromadb_collection_name: str = None):
+          chromadb_collection_name: str = None,
+          embedding_provider: str = "cohere",
+          embedding_model_name: Optional[str] = None,
+          embedding_api_key: Optional[str] = None,
+          embedding_base_url: Optional[str] = None):
     """
     Initializes the RAG search engine from structured or unstructured data.
 
@@ -151,6 +155,10 @@ def setup(data_path: Path,
         use_chromadb (bool): Whether to use ChromaDB instead of FAISS (default: False).
         chromadb_sqlite_path (str): Path to ChromaDB SQLite database (required if use_chromadb=True).
         chromadb_collection_name (str): ChromaDB collection name (required if use_chromadb=True).
+        embedding_provider (str): Embedding provider identifier (default: "cohere").
+        embedding_model_name (str): Optional provider-specific model name.
+        embedding_api_key (str): Optional API key for embedding provider; defaults to llm_api_key.
+        embedding_base_url (str): Optional base URL for provider endpoints (for OpenAI-compatible or Ollama hosts).
     Returns:
         RagSearchEngine: The initialized RAG search engine.
     Raises:
@@ -206,9 +214,19 @@ def setup(data_path: Path,
     try:
         raw_llm_client = CohereClient(api_key=llm_api_key)
         llm_client = CohereLLMClientAdapter(raw_llm_client)
-        embedding_model = CohereEmbeddingAdapter(raw_llm_client)
     except Exception as e:
         raise RuntimeError(f"Failed to initialize Cohere client: {e}")
+
+    try:
+        embedding_model = create_embedding_model(
+            provider=embedding_provider,
+            api_key=embedding_api_key or llm_api_key,
+            model=embedding_model_name,
+            base_url=embedding_base_url,
+            cohere_client=raw_llm_client if embedding_provider.strip().lower() == "cohere" else None,
+        )
+    except Exception as e:
+        raise RuntimeError(f"Failed to initialize embedding model: {e}") from e
 
     # Connect to vector database or ChromaDB
     if use_chromadb:

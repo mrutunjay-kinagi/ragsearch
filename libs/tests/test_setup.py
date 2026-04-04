@@ -311,6 +311,74 @@ def test_setup_falls_back_to_legacy_dimension_when_probe_runtime_fails(tmp_path,
     assert captured["embedding_dim"] == 4096
 
 
+def test_setup_uses_configured_embedding_provider_factory(tmp_path, monkeypatch):
+    data_path = tmp_path / "sample.csv"
+    data_path.write_text("name,description\na,b\n", encoding="utf-8")
+
+    class DummyCohereClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    class DummyEmbeddingModel:
+        def embed(self, texts):
+            class Resp:
+                embeddings = [[0.1, 0.2, 0.3]]
+
+            return Resp()
+
+    captured = {}
+
+    def fake_create_embedding_model(provider, **kwargs):
+        captured["provider"] = provider
+        captured["model"] = kwargs.get("model")
+        captured["api_key"] = kwargs.get("api_key")
+        captured["base_url"] = kwargs.get("base_url")
+        return DummyEmbeddingModel()
+
+    class DummyEngine:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    monkeypatch.setattr("libs.ragsearch.setup.CohereClient", DummyCohereClient)
+    monkeypatch.setattr("libs.ragsearch.setup.create_embedding_model", fake_create_embedding_model)
+    monkeypatch.setattr("libs.ragsearch.setup.build_vector_backend", lambda **kwargs: object())
+    monkeypatch.setattr("libs.ragsearch.setup.RagSearchEngine", DummyEngine)
+
+    setup(
+        Path(data_path),
+        llm_api_key="llm-key",
+        embedding_provider="openai",
+        embedding_model_name="text-embedding-3-small",
+        embedding_api_key="embedding-key",
+        embedding_base_url="https://api.openai.com/v1",
+    )
+
+    assert captured == {
+        "provider": "openai",
+        "model": "text-embedding-3-small",
+        "api_key": "embedding-key",
+        "base_url": "https://api.openai.com/v1",
+    }
+
+
+def test_setup_raises_runtime_error_for_invalid_embedding_provider(tmp_path, monkeypatch):
+    data_path = tmp_path / "sample.csv"
+    data_path.write_text("name,description\na,b\n", encoding="utf-8")
+
+    class DummyCohereClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    monkeypatch.setattr("libs.ragsearch.setup.CohereClient", DummyCohereClient)
+    monkeypatch.setattr(
+        "libs.ragsearch.setup.create_embedding_model",
+        lambda *args, **kwargs: (_ for _ in ()).throw(ValueError("Unsupported embedding provider")),
+    )
+
+    with pytest.raises(RuntimeError, match="Failed to initialize embedding model"):
+        setup(Path(data_path), llm_api_key="test-key", embedding_provider="invalid")
+
+
 def test_setup_exposes_structured_ingestion_diagnostics(tmp_path, monkeypatch):
     data_path = tmp_path / "sample.csv"
     data_path.write_text("name,description\na,b\n", encoding="utf-8")
