@@ -10,6 +10,7 @@ This folder stores Architecture Decision Records (ADRs) for ragsearch.
 - ADR-0005: retrieval-to-generation pipeline
 - ADR-0006: incremental indexing manifest and changed-file detection
 - ADR-0007: retrieval quality hooks for chunking and reranking
+- ADR-0008: structured observability and evaluation harness baseline
 
 ## Conventions
 

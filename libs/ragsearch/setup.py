@@ -21,6 +21,7 @@ The returned RagSearchEngine instance will use the selected backend for queries.
 import os
 import logging
 from pathlib import Path
+from time import perf_counter
 from typing import Optional
 import pandas as pd
 from cohere import Client as CohereClient
@@ -201,6 +202,7 @@ def setup(data_path: Path,
         RuntimeError: For other data loading, Cohere client, or vector database errors.
     """
     print("Starting setup of the RAG Search Engine...")
+    setup_started = perf_counter()
 
     # Validate data_path type
     if not isinstance(data_path, Path):
@@ -317,6 +319,17 @@ def setup(data_path: Path,
         )
 
     print("Setup complete.")
+    setup_latency_ms = round((perf_counter() - setup_started) * 1000.0, 3)
+    ingestion_diagnostics["observability"] = {
+        "stage": "ingestion",
+        "event": "setup_completed",
+        "metrics": {
+            "setup_latency_ms": setup_latency_ms,
+            "loaded_records": int(len(data)),
+            "selected_parser": ingestion_diagnostics.get("selected_parser", ""),
+            "fallback_recovered": ingestion_diagnostics.get("status") == "recovered_with_fallback",
+        },
+    }
     ingestion_diagnostics["indexing"] = getattr(engine, "indexing_diagnostics", {})
     engine.ingestion_diagnostics = ingestion_diagnostics
     return engine

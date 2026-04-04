@@ -443,3 +443,32 @@ def test_search_applies_configured_reranker():
     assert len(reranked) == 2
     assert reranked[0]["citation"]["record_id"] == baseline[1]["citation"]["record_id"]
     assert reranked[1]["citation"]["record_id"] == baseline[0]["citation"]["record_id"]
+
+
+def test_search_emits_observability_metrics():
+    engine = _make_engine()
+
+    engine.search("alpha", top_k=1)
+
+    retrieval_events = [item for item in engine.observability_events if item["stage"] == "retrieval"]
+    assert len(retrieval_events) >= 1
+    payload = retrieval_events[-1]["payload"]
+    assert payload["query"] == "alpha"
+    assert payload["top_k"] == 1
+    assert payload["results_count"] == 1
+    assert payload["latency_ms"] >= 0
+
+
+def test_answer_emits_generation_observability_metrics():
+    engine = _make_engine()
+
+    payload = engine.answer("alpha", top_k=1)
+
+    generation_events = [item for item in engine.observability_events if item["stage"] == "generation"]
+    assert len(generation_events) >= 1
+    metrics = generation_events[-1]["payload"]
+    assert metrics["query"] == "alpha"
+    assert metrics["top_k"] == 1
+    assert metrics["results_count"] == 1
+    assert metrics["citations_count"] == len(payload["citations"])
+    assert metrics["latency_ms"] >= 0

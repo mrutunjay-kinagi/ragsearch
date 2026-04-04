@@ -122,6 +122,13 @@ Ingestion diagnostics:
     - `selected_parser`: `structured/pandas`, `liteparse`, or `fallback`.
     - `status`: `success` or `recovered_with_fallback`.
     - `failure_reason`: empty string on success; primary parser error message when fallback recovery is used.
+    - `observability`: structured setup metrics for deterministic telemetry checks:
+        - `stage`: `ingestion`
+        - `event`: `setup_completed`
+        - `metrics.setup_latency_ms`: setup latency for current run
+        - `metrics.loaded_records`: records loaded into index for current run
+        - `metrics.selected_parser`: parser chosen by setup
+        - `metrics.fallback_recovered`: boolean fallback recovery flag
 
 Note: supported extensions can be backend-dependent. LiteParse supports additional types such as `.doc`, `.png`, `.jpg`, and `.jpeg`, while fallback parsing is intentionally narrower.
 
@@ -210,6 +217,20 @@ Answer response fields:
 HTTP API note:
 - `POST /answer` returns the same structured payload as `rag_engine.answer(...)`
 - `POST /query` remains backward-compatible and continues to return search results only
+
+Observability events:
+- `rag_engine.observability_events` stores structured events emitted during indexing, retrieval, and generation.
+- Retrieval events include deterministic payload fields: `query`, `top_k`, `results_count`, `latency_ms`.
+- Generation events include deterministic payload fields: `query`, `top_k`, `results_count`, `citations_count`, `latency_ms`.
+
+Evaluation harness baseline:
+- Use `libs.ragsearch.evaluation.run_regression_gates(...)` to run deterministic pass/fail gates over a fixed case set.
+- Default thresholds are configurable via `EvaluationThresholds(min_results=..., min_citations=...)`.
+- CI-ready deterministic command:
+
+```bash
+poetry run pytest libs/tests/test_evaluation.py -q
+```
 
 ## Running the Web Interface
 ### Step 1: Start the Flask Server
