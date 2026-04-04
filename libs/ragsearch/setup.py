@@ -28,6 +28,8 @@ from .errors import NoDataFoundError, ParsingError, RagSearchError
 from .embedding_models import create_embedding_model, infer_embedding_dimension
 from .llm_clients import create_llm_client
 from .parsers import FallbackParser, LiteParseAdapter, get_parser
+from .chunking import ChunkingStrategy
+from .reranking import Reranker
 from .vector_db import VectorDB
 from .engine import RagSearchEngine
 
@@ -154,6 +156,8 @@ def setup(data_path: Path,
           chromadb_sqlite_path: str = None,
           chromadb_collection_name: str = None,
           embeddings_dir: Optional[str] = None,
+          chunking_strategy: Optional[ChunkingStrategy] = None,
+          reranker: Optional[Reranker] = None,
           embedding_provider: str = "cohere",
           embedding_model_name: Optional[str] = None,
           embedding_api_key: Optional[str] = None,
@@ -175,6 +179,8 @@ def setup(data_path: Path,
         chromadb_sqlite_path (str): Path to ChromaDB SQLite database (required if use_chromadb=True).
         chromadb_collection_name (str): ChromaDB collection name (required if use_chromadb=True).
         embeddings_dir (str): Optional directory for local embedding manifest/cache files.
+        chunking_strategy: Optional text chunking strategy for retrieval indexing.
+        reranker: Optional result reranker applied after retrieval.
         embedding_provider (str): Embedding provider identifier (default: "cohere").
         embedding_model_name (str): Optional provider-specific model name.
         embedding_api_key (str): Optional API key for embedding provider; defaults to llm_api_key.
@@ -283,6 +289,8 @@ def setup(data_path: Path,
             vector_db=None,
             file_name=file_name,
             save_dir=embeddings_dir or "embeddings",
+            chunking_strategy=chunking_strategy,
+            reranker=reranker,
             chromadb_sqlite_path=chromadb_sqlite_path,
             chromadb_collection_name=chromadb_collection_name
         )
@@ -303,6 +311,8 @@ def setup(data_path: Path,
             llm_client=llm_client,
             vector_db=vector_db,
             save_dir=embeddings_dir or "embeddings",
+            chunking_strategy=chunking_strategy,
+            reranker=reranker,
             file_name=file_name
         )
 

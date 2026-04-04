@@ -5,6 +5,8 @@ Unit tests for citation payload behavior in RagSearchEngine.search.
 import pandas as pd
 
 from libs.ragsearch.engine import RagSearchEngine
+from libs.ragsearch.chunking import FixedWordChunkingStrategy, RowChunkingStrategy
+from libs.ragsearch.reranking import NoOpReranker
 from libs.ragsearch.vector_db import VectorDB
 
 
@@ -49,6 +51,11 @@ class CountingEmbeddingModel:
             seed = float((sum(ord(ch) for ch in str(text)) % 10) + 1)
             vectors.append([seed, seed / 2.0, seed / 3.0, seed / 4.0])
         return DummyEmbeddingResponse(vectors)
+
+
+class ReverseReranker:
+    def rerank(self, query, results):
+        return list(reversed(results))
 
 
 def _make_engine():
@@ -153,6 +160,7 @@ def test_search_handles_missing_text_fields():
             }
         ]
     )
+    engine.index_data = engine.data.copy()
 
     result = engine.search("alpha", top_k=1)[0]
     assert result["citation"]["excerpt"] == ""
@@ -350,3 +358,88 @@ def test_incremental_indexing_reindexes_only_changed_records(tmp_path):
     assert second_engine.indexing_diagnostics["new_records"] == 0
     assert second_engine.indexing_diagnostics["changed_records"] == 1
     assert second_engine.indexing_diagnostics["reused_records"] == 1
+
+
+def test_default_hook_path_matches_explicit_defaults():
+    data = pd.DataFrame(
+        [
+            {"text": "alpha", "source_path": "/docs/a.txt", "parser_name": "fallback/plain_text"},
+            {"text": "beta", "source_path": "/docs/b.txt", "parser_name": "fallback/plain_text"},
+        ]
+    )
+
+    implicit_engine = RagSearchEngine(
+        data=data.copy(),
+        embedding_model=DummyEmbeddingModel(),
+        llm_client=DummyLLMClient(),
+        vector_db=VectorDB(embedding_dim=4),
+        save_dir="embeddings/test_engine",
+    )
+    explicit_engine = RagSearchEngine(
+        data=data.copy(),
+        embedding_model=DummyEmbeddingModel(),
+        llm_client=DummyLLMClient(),
+        vector_db=VectorDB(embedding_dim=4),
+        save_dir="embeddings/test_engine",
+        chunking_strategy=RowChunkingStrategy(),
+        reranker=NoOpReranker(),
+    )
+
+    implicit = implicit_engine.search("alpha", top_k=2)
+    explicit = explicit_engine.search("alpha", top_k=2)
+    assert implicit == explicit
+
+
+def test_chunking_hook_splits_records_deterministically(tmp_path):
+    data = pd.DataFrame(
+        [
+            {"text": "alpha beta gamma"},
+        ]
+    )
+    model = CountingEmbeddingModel()
+
+    engine = RagSearchEngine(
+        data=data,
+        embedding_model=model,
+        llm_client=DummyLLMClient(),
+        vector_db=VectorDB(embedding_dim=4),
+        save_dir=str(tmp_path / "embeddings"),
+        file_name="chunked.csv",
+        chunking_strategy=FixedWordChunkingStrategy(words_per_chunk=1),
+    )
+
+    assert model.call_sizes == [3]
+    assert engine.indexing_diagnostics["total_records"] == 3
+
+
+def test_search_applies_configured_reranker():
+    data = pd.DataFrame(
+        [
+            {"text": "alpha", "source_path": "/docs/a.txt", "parser_name": "fallback/plain_text"},
+            {"text": "beta", "source_path": "/docs/b.txt", "parser_name": "fallback/plain_text"},
+        ]
+    )
+
+    baseline_engine = RagSearchEngine(
+        data=data.copy(),
+        embedding_model=DummyEmbeddingModel(),
+        llm_client=DummyLLMClient(),
+        vector_db=VectorDB(embedding_dim=4),
+        save_dir="embeddings/test_engine",
+    )
+    reranked_engine = RagSearchEngine(
+        data=data.copy(),
+        embedding_model=DummyEmbeddingModel(),
+        llm_client=DummyLLMClient(),
+        vector_db=VectorDB(embedding_dim=4),
+        save_dir="embeddings/test_engine",
+        reranker=ReverseReranker(),
+    )
+
+    baseline = baseline_engine.search("alpha", top_k=2)
+    reranked = reranked_engine.search("alpha", top_k=2)
+
+    assert len(baseline) == 2
+    assert len(reranked) == 2
+    assert reranked[0]["citation"]["record_id"] == baseline[1]["citation"]["record_id"]
+    assert reranked[1]["citation"]["record_id"] == baseline[0]["citation"]["record_id"]

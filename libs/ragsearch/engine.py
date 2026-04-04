@@ -5,11 +5,13 @@ which is responsible for initializing the RAG Search Engine
 import logging
 import hashlib
 import json
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 import pandas as pd
 from .errors import NoDataFoundError
 from .embedding_models import EmbeddingModel, extract_embeddings
 from .llm_clients import LLMClient
+from .chunking import ChunkingStrategy, RowChunkingStrategy
+from .reranking import NoOpReranker, Reranker
 from .utils import (extract_textual_columns,
                     preprocess_search_text,
                     preprocess_text,
@@ -46,6 +48,8 @@ class RagSearchEngine:
                  batch_size: int = 100,
                  save_dir: str = "embeddings",
                  file_name: str = "data.csv",
+                 chunking_strategy: Optional[ChunkingStrategy] = None,
+                 reranker: Optional[Reranker] = None,
                  chromadb_sqlite_path: str = None,
                  chromadb_collection_name: str = None):
         """
@@ -67,8 +71,11 @@ class RagSearchEngine:
         self.batch_size = batch_size
         self.save_dir = Path(save_dir)
         self.file_name = file_name
+        self.chunking_strategy = chunking_strategy or RowChunkingStrategy()
+        self.reranker = reranker or NoOpReranker()
         self.chromadb_sqlite_path = chromadb_sqlite_path
         self.chromadb_collection_name = chromadb_collection_name
+        self.index_data = data
         self.indexing_diagnostics = {
             "manifest_version": 1,
             "manifest_path": "",
@@ -91,9 +98,13 @@ class RagSearchEngine:
         # Extract textual columns
         textual_columns = extract_textual_columns(data)
 
+        # Build index rows before embedding so chunking strategy can expand records.
+        if self.vector_db is not None:
+            self.index_data = self._build_index_data(textual_columns)
+
         # Only process embeddings if using FAISS
         if self.vector_db is not None:
-            self._process_and_store_embeddings(textual_columns)
+            self._process_and_store_embeddings()
 
         logging.info("RAG Search Engine initialized successfully.")
     def chromadb_search(self, query: str, top_k: int = 5):
@@ -105,27 +116,24 @@ class RagSearchEngine:
             raise ValueError("ChromaDB path and collection name must be set for chromadb_search.")
         return query_chromadb(self.chromadb_sqlite_path, self.chromadb_collection_name, query, n_results=top_k)
 
-    def _process_and_store_embeddings(self, textual_columns: list):
+    def _process_and_store_embeddings(self):
         """
         Processes and stores embeddings in batches, saving to the vector database incrementally.
 
         Args:
             textual_columns (list): The list of columns to combine for text embeddings.
         """
-        # Combine textual fields into a single text column
-        self.data["combined_text"] = self.data.apply(lambda row: preprocess_text(row, textual_columns), axis=1)
-
         manifest_path = self.save_dir / f"{self.file_name}.embedding_manifest.json"
         manifest = self._load_embedding_manifest(manifest_path)
 
-        total_records = len(self.data)
+        total_records = len(self.index_data)
         embedded_records = 0
         reused_records = 0
         new_records = 0
         changed_records = 0
 
         # Split data into batches
-        batches = [self.data.iloc[i:i + self.batch_size] for i in range(0, len(self.data), self.batch_size)]
+        batches = [self.index_data.iloc[i:i + self.batch_size] for i in range(0, len(self.index_data), self.batch_size)]
         logging.info(f"Data split into {len(batches)} batches (batch size: {self.batch_size})")
 
         for batch_idx, batch in enumerate(batches):
@@ -176,7 +184,7 @@ class RagSearchEngine:
                 batch["embedding"] = resolved_embeddings
 
                 # Insert embeddings and metadata into the vector database
-                metadata_columns = self.data.columns.difference(["embedding"]).tolist()
+                metadata_columns = self.index_data.columns.difference(["embedding"]).tolist()
                 insert_embeddings_to_vector_db(self.vector_db, batch, metadata_columns)
 
                 logging.info(f"Batch {batch_idx + 1} successfully stored in the vector database.")
@@ -194,6 +202,32 @@ class RagSearchEngine:
             "changed_records": int(changed_records),
         }
 
+    def _build_index_data(self, textual_columns: list) -> pd.DataFrame:
+        rows = []
+        is_default_chunking = isinstance(self.chunking_strategy, RowChunkingStrategy)
+
+        for source_record_id, row in self.data.iterrows():
+            combined_text = preprocess_text(row, textual_columns)
+            chunks = self.chunking_strategy.chunk_text(combined_text)
+            if not isinstance(chunks, list):
+                raise ValueError("chunking strategy must return a list of text chunks")
+
+            normalized_chunks = [str(chunk).strip() for chunk in chunks if str(chunk).strip()]
+            if not normalized_chunks:
+                normalized_chunks = [combined_text]
+
+            for chunk_index, chunk_text in enumerate(normalized_chunks):
+                payload = row.to_dict()
+                payload["combined_text"] = chunk_text
+                if not is_default_chunking:
+                    payload["source_record_id"] = int(source_record_id)
+                    payload["chunk_index"] = int(chunk_index)
+                rows.append(payload)
+
+        if not rows:
+            raise NoDataFoundError("No indexable text chunks generated from input data")
+        return pd.DataFrame(rows)
+
     @staticmethod
     def _content_hash(value: str) -> str:
         return hashlib.sha256(value.encode("utf-8")).hexdigest()
@@ -202,10 +236,11 @@ class RagSearchEngine:
     def _record_cache_key(row: pd.Series) -> str:
         source_path = str(row.get("source_path", "")).strip()
         parser_name = str(row.get("parser_name", "")).strip()
-        record_id = int(row.name)
+        source_record_id = int(row.get("source_record_id", row.name))
+        chunk_index = int(row.get("chunk_index", 0))
         if source_path:
-            return f"{source_path}::{parser_name}::{record_id}"
-        return f"row::{record_id}"
+            return f"{source_path}::{parser_name}::{source_record_id}::{chunk_index}"
+        return f"row::{source_record_id}::{chunk_index}"
 
     @staticmethod
     def _load_embedding_manifest(manifest_path: Path) -> Dict[str, Any]:
@@ -270,9 +305,11 @@ class RagSearchEngine:
 
             # Map indices to metadata and include similarity scores, excluding 'embedding'
             enriched_results = []
+            index_frame = self.index_data if self.vector_db is not None else self.data
+
             for result in results:
                 index = result["index"]
-                metadata = self.data.iloc[index].to_dict()
+                metadata = index_frame.iloc[index].to_dict()
 
                 # Remove the embedding from metadata if it exists
                 if "embedding" in metadata:
@@ -297,8 +334,12 @@ class RagSearchEngine:
                     "similarity": float(result.get("similarity", 0.0)),
                 })
 
-            logging.info(f"Found {len(enriched_results)} results for the query.")
-            return enriched_results
+            reranked = self.reranker.rerank(query, enriched_results)
+            if not isinstance(reranked, list):
+                raise ValueError("reranker must return a list of retrieval results")
+
+            logging.info(f"Found {len(reranked)} results for the query after reranking.")
+            return reranked[:top_k]
         except Exception as e:
             logging.error(f"Search failed: {e}")
             raise
