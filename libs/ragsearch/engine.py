@@ -3,10 +3,10 @@ This module contains the RAGSearchEngine class,
 which is responsible for initializing the RAG Search Engine
 """
 import logging
-from typing import List, Dict
+from typing import List, Dict, Any
 import pandas as pd
-from cohere import Client as CohereClient
 from .errors import NoDataFoundError
+from .embedding_models import EmbeddingModel, extract_embeddings
 from .utils import (extract_textual_columns,
                     preprocess_search_text,
                     preprocess_text,
@@ -37,8 +37,8 @@ class RagSearchEngine:
 
     def __init__(self,
                  data: pd.DataFrame,
-                 embedding_model: CohereClient,
-                 llm_client: CohereClient,
+                 embedding_model: EmbeddingModel,
+                 llm_client: Any,
                  vector_db: VectorDB = None,
                  batch_size: int = 100,
                  save_dir: str = "embeddings",
@@ -50,8 +50,8 @@ class RagSearchEngine:
 
         Args:
             data (pd.DataFrame): The input data containing structured information.
-            embedding_model (CohereClient): The client for generating text embeddings.
-            llm_client (CohereClient): The client for interacting with the LLM.
+            embedding_model (EmbeddingModel): Embedding provider implementing the embedding contract.
+            llm_client (Any): The client for interacting with the LLM.
             vector_db (VectorDB): The vector database for storing and querying embeddings.
             batch_size (int): Number of rows to process in each batch.
             save_dir (str): Directory to save intermediate embeddings.
@@ -113,7 +113,7 @@ class RagSearchEngine:
 
                 # Generate embeddings
                 response = self.embedding_model.embed(texts=batch["combined_text"].tolist())
-                embeddings = response.embeddings
+                embeddings = extract_embeddings(response)
 
                 # Add embeddings to the batch DataFrame
                 batch["embedding"] = embeddings
@@ -141,7 +141,8 @@ class RagSearchEngine:
             logging.info(f"Processing search query: '{query}'")
 
             # Generate the query embedding
-            query_embedding = self.embedding_model.embed(texts=[preprocess_search_text(query)]).embeddings[0]
+            query_response = self.embedding_model.embed(texts=[preprocess_search_text(query)])
+            query_embedding = extract_embeddings(query_response)[0]
 
             # Search the vector database
             results = search_vector_db(self.vector_db, query_embedding, top_k=top_k)

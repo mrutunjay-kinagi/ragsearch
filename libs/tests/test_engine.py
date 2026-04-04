@@ -161,3 +161,32 @@ def test_serialize_query_results_keeps_backward_compatibility():
 
     detailed_payload = RagSearchEngine._serialize_query_results(enriched, include_details=True)
     assert detailed_payload == enriched
+
+
+def test_search_raises_value_error_for_invalid_embedding_response():
+    class BadEmbeddingModel:
+        def embed(self, texts):
+            return object()
+
+    data = pd.DataFrame(
+        [
+            {
+                "text": "alpha",
+                "source_path": "/docs/a.txt",
+                "parser_name": "fallback/plain_text",
+            }
+        ]
+    )
+    engine = RagSearchEngine(
+        data=data,
+        embedding_model=BadEmbeddingModel(),
+        llm_client=DummyLLMClient(),
+        vector_db=VectorDB(embedding_dim=4),
+        save_dir="embeddings/test_engine",
+    )
+
+    try:
+        engine.search("alpha", top_k=1)
+        raise AssertionError("Expected ValueError for invalid embedding response")
+    except ValueError as exc:
+        assert "embeddings" in str(exc).lower()
