@@ -74,7 +74,7 @@ def _load_unstructured_data(data_path: Path, diagnostics: Optional[dict] = None)
         NoDataFoundError: If no parseable content found or all content is empty.
         ValueError: If document structure is invalid (bad text or metadata types).
     
-    Integration point: Slice 1 parser contract (see docs/adr/ADR-0000-top-10-architecture-questions.md).
+    Integration point: parser contract (see docs/adr/ADR-0002-document-parsing-pipeline.md).
     """
     parser = get_parser(data_path)
     if diagnostics is not None:
