@@ -3,7 +3,7 @@ This module contains the RAGSearchEngine class,
 which is responsible for initializing the RAG Search Engine
 """
 import logging
-from typing import List, Dict
+from typing import Any, Dict, List
 import pandas as pd
 from .errors import NoDataFoundError
 from .embedding_models import EmbeddingModel, extract_embeddings
@@ -197,6 +197,67 @@ class RagSearchEngine:
             return results
         return [res.get("metadata", {}) for res in results]
 
+    @staticmethod
+    def _build_answer_context(results: List[Dict]) -> str:
+        """Build a numbered retrieval context block for answer generation."""
+        if not results:
+            return ""
+
+        blocks = []
+        for position, result in enumerate(results, start=1):
+            citation = result.get("citation", {})
+            metadata = result.get("metadata", {})
+            excerpt = citation.get("excerpt") or metadata.get("text") or metadata.get("combined_text") or ""
+            source_path = citation.get("source_path", "")
+            parser_name = citation.get("parser_name", "")
+            similarity = result.get("similarity", 0.0)
+
+            blocks.append(
+                "\n".join(
+                    [
+                        f"[{position}] source_path: {source_path}",
+                        f"parser_name: {parser_name}",
+                        f"similarity: {similarity:.4f}",
+                        f"excerpt: {excerpt}",
+                    ]
+                )
+            )
+
+        return "\n\n".join(blocks)
+
+    @staticmethod
+    def _build_answer_prompt(query: str, results: List[Dict]) -> str:
+        """Construct a deterministic prompt for answer generation."""
+        context = RagSearchEngine._build_answer_context(results)
+        return "\n".join(
+            [
+                "You are a retrieval-augmented assistant.",
+                "Answer only from the provided sources.",
+                "If the sources are insufficient, say you do not know.",
+                "Cite sources inline using bracketed numbers like [1] or [1][2].",
+                "Keep the answer concise and grounded in the sources.",
+                "",
+                f"Question: {query}",
+                "",
+                "Sources:",
+                context or "(no sources retrieved)",
+            ]
+        )
+
+    def answer(self, query: str, top_k: int = 5) -> Dict[str, Any]:
+        """Generate a grounded answer with preserved retrieval citations."""
+        results = self.search(query, top_k=top_k)
+        prompt = self._build_answer_prompt(query, results)
+        answer_text = self.llm_client.generate(prompt)
+
+        return {
+            "question": query,
+            "answer": answer_text,
+            "results": results,
+            "citations": [result.get("citation", {}) for result in results],
+            "context": self._build_answer_context(results),
+        }
+
     def run(self):
         """
         Launches an interactive search interface where users can input queries and see results.
@@ -238,6 +299,16 @@ class RagSearchEngine:
             results = self.search(query, top_k=top_k)
             serialized = self._serialize_query_results(results, include_details=include_details)
             return jsonify({"results": serialized})
+
+        @app.route('/answer', methods=['POST'])
+        def answer():
+            request_data = request.get_json()
+            query = request_data.get('query')
+            if not query:
+                return jsonify({"error": "Query parameter is required"}), 400
+
+            top_k = int(request_data.get('top_k', 5))
+            return jsonify(self.answer(query, top_k=top_k))
 
         # Run the Flask app on a separate thread
         threading.Thread(target=app.run, kwargs={"host": "0.0.0.0", "port": 8080, "use_reloader": False}).start()

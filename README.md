@@ -144,6 +144,28 @@ for result in results:
 # - excerpt: up to 200 chars from text/combined_text
 ```
 
+### Generate a Grounded Answer
+Use the retrieval-to-generation pipeline when you want a direct answer with preserved citations:
+
+```python
+response = rag_engine.answer("What does the document say about the accident location?", top_k=3)
+
+print(response["answer"])
+for citation in response["citations"]:
+    print(citation)
+```
+
+Answer response fields:
+- `question`: original query string
+- `answer`: generated response text
+- `results`: full retrieval results, including `metadata`, `citation`, and `similarity`
+- `citations`: citation list preserved from retrieval
+- `context`: grounded retrieval context supplied to the LLM
+
+HTTP API note:
+- `POST /answer` returns the same structured payload as `rag_engine.answer(...)`
+- `POST /query` remains backward-compatible and continues to return search results only
+
 ## Running the Web Interface
 ### Step 1: Start the Flask Server
 Run the following command to start the Flask server:
