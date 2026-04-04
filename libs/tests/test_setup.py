@@ -487,6 +487,7 @@ def test_setup_exposes_structured_ingestion_diagnostics(tmp_path, monkeypatch):
         "selected_parser": "structured/pandas",
         "status": "success",
         "failure_reason": "",
+        "indexing": {},
     }
 
 
@@ -538,6 +539,7 @@ def test_setup_unstructured_uses_fallback_when_liteparse_runtime_fails(tmp_path,
         "selected_parser": "fallback",
         "status": "recovered_with_fallback",
         "failure_reason": "LiteParse timed out",
+        "indexing": {},
     }
 
 
