@@ -379,6 +379,85 @@ def test_setup_raises_runtime_error_for_invalid_embedding_provider(tmp_path, mon
         setup(Path(data_path), llm_api_key="test-key", embedding_provider="invalid")
 
 
+def test_setup_uses_configured_llm_provider_factory(tmp_path, monkeypatch):
+    data_path = tmp_path / "sample.csv"
+    data_path.write_text("name,description\na,b\n", encoding="utf-8")
+
+    class DummyCohereClient:
+        def __init__(self, *args, **kwargs):
+            raise AssertionError("CohereClient should not be initialized for non-Cohere LLM providers")
+
+    class DummyLLMClient:
+        def generate(self, prompt, **kwargs):
+            return "ok"
+
+    class DummyEmbeddingModel:
+        def embed(self, texts):
+            class Resp:
+                embeddings = [[0.1, 0.2, 0.3]]
+
+            return Resp()
+
+    captured = {}
+
+    def fake_create_llm_client(provider, **kwargs):
+        captured["provider"] = provider
+        captured["model"] = kwargs.get("model")
+        captured["api_key"] = kwargs.get("api_key")
+        captured["base_url"] = kwargs.get("base_url")
+        return DummyLLMClient()
+
+    def fake_create_embedding_model(provider, **kwargs):
+        return DummyEmbeddingModel()
+
+    class DummyEngine:
+        def __init__(self, *args, **kwargs):
+            captured["llm_client"] = kwargs["llm_client"]
+
+    monkeypatch.setattr("libs.ragsearch.setup.CohereClient", DummyCohereClient)
+    monkeypatch.setattr("libs.ragsearch.setup.create_llm_client", fake_create_llm_client)
+    monkeypatch.setattr("libs.ragsearch.setup.create_embedding_model", fake_create_embedding_model)
+    monkeypatch.setattr("libs.ragsearch.setup.build_vector_backend", lambda **kwargs: object())
+    monkeypatch.setattr("libs.ragsearch.setup.RagSearchEngine", DummyEngine)
+
+    setup(
+        Path(data_path),
+        llm_api_key="llm-key",
+        llm_provider="openai",
+        llm_model_name="gpt-4o-mini",
+        llm_base_url="https://api.openai.com/v1",
+        embedding_provider="openai",
+    )
+
+    assert captured["provider"] == "openai"
+    assert captured["model"] == "gpt-4o-mini"
+    assert captured["api_key"] == "llm-key"
+    assert captured["base_url"] == "https://api.openai.com/v1"
+    assert isinstance(captured["llm_client"], DummyLLMClient)
+
+
+def test_setup_raises_runtime_error_for_invalid_llm_provider(tmp_path, monkeypatch):
+    data_path = tmp_path / "sample.csv"
+    data_path.write_text("name,description\na,b\n", encoding="utf-8")
+
+    class DummyCohereClient:
+        def __init__(self, *args, **kwargs):
+            raise AssertionError("CohereClient should not be initialized for invalid LLM provider config")
+
+    class DummyEmbeddingModel:
+        def embed(self, texts):
+            class Resp:
+                embeddings = [[0.1, 0.2, 0.3]]
+
+            return Resp()
+
+    monkeypatch.setattr("libs.ragsearch.setup.CohereClient", DummyCohereClient)
+    monkeypatch.setattr("libs.ragsearch.setup.create_embedding_model", lambda *args, **kwargs: DummyEmbeddingModel())
+
+    with pytest.raises(RuntimeError, match="Failed to initialize LLM client"):
+        setup(Path(data_path), llm_api_key="test-key", llm_provider="invalid")
+
+
 def test_setup_exposes_structured_ingestion_diagnostics(tmp_path, monkeypatch):
     data_path = tmp_path / "sample.csv"
     data_path.write_text("name,description\na,b\n", encoding="utf-8")
