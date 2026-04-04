@@ -38,6 +38,19 @@ class DummyLLMClient:
         return "grounded answer"
 
 
+class CountingEmbeddingModel:
+    def __init__(self):
+        self.call_sizes = []
+
+    def embed(self, texts):
+        self.call_sizes.append(len(texts))
+        vectors = []
+        for text in texts:
+            seed = float((sum(ord(ch) for ch in str(text)) % 10) + 1)
+            vectors.append([seed, seed / 2.0, seed / 3.0, seed / 4.0])
+        return DummyEmbeddingResponse(vectors)
+
+
 def _make_engine():
     data = pd.DataFrame(
         [
@@ -235,3 +248,105 @@ def test_build_answer_prompt_mentions_grounding_rules():
     assert "If the sources are insufficient, say you do not know." in prompt
     assert "Question: What is alpha?" in prompt
     assert "(no sources retrieved)" in prompt
+
+
+def test_incremental_indexing_first_run_marks_all_as_new(tmp_path):
+    data = pd.DataFrame(
+        [
+            {"text": "alpha", "source_path": "/docs/a.txt", "parser_name": "fallback/plain_text"},
+            {"text": "beta", "source_path": "/docs/b.txt", "parser_name": "fallback/plain_text"},
+        ]
+    )
+    model = CountingEmbeddingModel()
+
+    engine = RagSearchEngine(
+        data=data,
+        embedding_model=model,
+        llm_client=DummyLLMClient(),
+        vector_db=VectorDB(embedding_dim=4),
+        save_dir=str(tmp_path / "embeddings"),
+        file_name="incremental.csv",
+    )
+
+    assert model.call_sizes == [2]
+    assert engine.indexing_diagnostics["total_records"] == 2
+    assert engine.indexing_diagnostics["embedded_records"] == 2
+    assert engine.indexing_diagnostics["new_records"] == 2
+    assert engine.indexing_diagnostics["changed_records"] == 0
+    assert engine.indexing_diagnostics["reused_records"] == 0
+
+
+def test_incremental_indexing_no_change_rerun_reuses_cached_embeddings(tmp_path):
+    data = pd.DataFrame(
+        [
+            {"text": "alpha", "source_path": "/docs/a.txt", "parser_name": "fallback/plain_text"},
+            {"text": "beta", "source_path": "/docs/b.txt", "parser_name": "fallback/plain_text"},
+        ]
+    )
+
+    first_model = CountingEmbeddingModel()
+    RagSearchEngine(
+        data=data.copy(),
+        embedding_model=first_model,
+        llm_client=DummyLLMClient(),
+        vector_db=VectorDB(embedding_dim=4),
+        save_dir=str(tmp_path / "embeddings"),
+        file_name="incremental.csv",
+    )
+
+    second_model = CountingEmbeddingModel()
+    second_engine = RagSearchEngine(
+        data=data.copy(),
+        embedding_model=second_model,
+        llm_client=DummyLLMClient(),
+        vector_db=VectorDB(embedding_dim=4),
+        save_dir=str(tmp_path / "embeddings"),
+        file_name="incremental.csv",
+    )
+
+    assert second_model.call_sizes == []
+    assert second_engine.indexing_diagnostics["embedded_records"] == 0
+    assert second_engine.indexing_diagnostics["new_records"] == 0
+    assert second_engine.indexing_diagnostics["changed_records"] == 0
+    assert second_engine.indexing_diagnostics["reused_records"] == 2
+
+
+def test_incremental_indexing_reindexes_only_changed_records(tmp_path):
+    baseline = pd.DataFrame(
+        [
+            {"text": "alpha", "source_path": "/docs/a.txt", "parser_name": "fallback/plain_text"},
+            {"text": "beta", "source_path": "/docs/b.txt", "parser_name": "fallback/plain_text"},
+        ]
+    )
+    updated = pd.DataFrame(
+        [
+            {"text": "alpha updated", "source_path": "/docs/a.txt", "parser_name": "fallback/plain_text"},
+            {"text": "beta", "source_path": "/docs/b.txt", "parser_name": "fallback/plain_text"},
+        ]
+    )
+
+    first_model = CountingEmbeddingModel()
+    RagSearchEngine(
+        data=baseline,
+        embedding_model=first_model,
+        llm_client=DummyLLMClient(),
+        vector_db=VectorDB(embedding_dim=4),
+        save_dir=str(tmp_path / "embeddings"),
+        file_name="incremental.csv",
+    )
+
+    second_model = CountingEmbeddingModel()
+    second_engine = RagSearchEngine(
+        data=updated,
+        embedding_model=second_model,
+        llm_client=DummyLLMClient(),
+        vector_db=VectorDB(embedding_dim=4),
+        save_dir=str(tmp_path / "embeddings"),
+        file_name="incremental.csv",
+    )
+
+    assert second_model.call_sizes == [1]
+    assert second_engine.indexing_diagnostics["embedded_records"] == 1
+    assert second_engine.indexing_diagnostics["new_records"] == 0
+    assert second_engine.indexing_diagnostics["changed_records"] == 1
+    assert second_engine.indexing_diagnostics["reused_records"] == 1

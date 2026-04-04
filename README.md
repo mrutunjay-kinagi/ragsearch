@@ -1,12 +1,13 @@
 # ragsearch
 
-`ragsearch` is a Python library designed for building a Retrieval-Augmented Generation (RAG) application that enables natural language querying over structured data. This tool leverages embedding models and a vector database (FAISS or ChromaDB) to provide an efficient and scalable search engine.
+`ragsearch` is a Python library designed for building a Retrieval-Augmented Generation (RAG) application that enables natural language querying over both structured and unstructured data. This tool leverages embedding models and a vector database (FAISS or ChromaDB) to provide an efficient and scalable search engine.
 
 ## Features
 - Seamless integration with the Cohere AI LLM for generating embeddings.
 - Utilizes FAISS for fast, in-memory vector storage and similarity search.
 - Optional ChromaDB backend for persistent, scalable vector search using SQLite.
 - Unstructured ingestion support through LiteParse (with Python fallback parsers).
+- Incremental indexing support for FAISS setup runs with changed-file detection and skip-unchanged behavior.
 - Easy setup and configuration for different use cases.
 - Simple web interface for user interaction.
 
@@ -123,6 +124,21 @@ Ingestion diagnostics:
     - `failure_reason`: empty string on success; primary parser error message when fallback recovery is used.
 
 Note: supported extensions can be backend-dependent. LiteParse supports additional types such as `.doc`, `.png`, `.jpg`, and `.jpeg`, while fallback parsing is intentionally narrower.
+
+Incremental indexing behavior (FAISS backend):
+- `setup()` persists an embedding manifest in the embeddings directory and reuses cached embeddings for unchanged records.
+- New or changed records are re-embedded, while unchanged records are skipped for embedding generation.
+- After setup, `rag_engine.ingestion_diagnostics["indexing"]` reports deterministic counters:
+    - `manifest_version`: manifest schema version.
+    - `manifest_path`: on-disk manifest file path.
+    - `total_records`: total records considered for indexing.
+    - `embedded_records`: records embedded in the current run.
+    - `reused_records`: records reused from manifest cache.
+    - `new_records`: records seen for the first time.
+    - `changed_records`: previously-seen records with changed content hash.
+
+Optional setup parameter:
+- `embeddings_dir`: custom directory for embedding artifacts and incremental manifest cache.
 
 ### Step 3: Run a Search Query
 Once the `ragsearch` is initialized, you can perform natural language searches.

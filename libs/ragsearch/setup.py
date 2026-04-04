@@ -153,6 +153,7 @@ def setup(data_path: Path,
           use_chromadb: bool = False,
           chromadb_sqlite_path: str = None,
           chromadb_collection_name: str = None,
+          embeddings_dir: Optional[str] = None,
           embedding_provider: str = "cohere",
           embedding_model_name: Optional[str] = None,
           embedding_api_key: Optional[str] = None,
@@ -173,6 +174,7 @@ def setup(data_path: Path,
         use_chromadb (bool): Whether to use ChromaDB instead of FAISS (default: False).
         chromadb_sqlite_path (str): Path to ChromaDB SQLite database (required if use_chromadb=True).
         chromadb_collection_name (str): ChromaDB collection name (required if use_chromadb=True).
+        embeddings_dir (str): Optional directory for local embedding manifest/cache files.
         embedding_provider (str): Embedding provider identifier (default: "cohere").
         embedding_model_name (str): Optional provider-specific model name.
         embedding_api_key (str): Optional API key for embedding provider; defaults to llm_api_key.
@@ -280,6 +282,7 @@ def setup(data_path: Path,
             llm_client=llm_client,
             vector_db=None,
             file_name=file_name,
+            save_dir=embeddings_dir or "embeddings",
             chromadb_sqlite_path=chromadb_sqlite_path,
             chromadb_collection_name=chromadb_collection_name
         )
@@ -299,9 +302,11 @@ def setup(data_path: Path,
             embedding_model=embedding_model,
             llm_client=llm_client,
             vector_db=vector_db,
+            save_dir=embeddings_dir or "embeddings",
             file_name=file_name
         )
 
     print("Setup complete.")
+    ingestion_diagnostics["indexing"] = getattr(engine, "indexing_diagnostics", {})
     engine.ingestion_diagnostics = ingestion_diagnostics
     return engine

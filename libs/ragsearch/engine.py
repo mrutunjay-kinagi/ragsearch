@@ -3,6 +3,8 @@ This module contains the RAGSearchEngine class,
 which is responsible for initializing the RAG Search Engine
 """
 import logging
+import hashlib
+import json
 from typing import Any, Dict, List
 import pandas as pd
 from .errors import NoDataFoundError
@@ -67,6 +69,15 @@ class RagSearchEngine:
         self.file_name = file_name
         self.chromadb_sqlite_path = chromadb_sqlite_path
         self.chromadb_collection_name = chromadb_collection_name
+        self.indexing_diagnostics = {
+            "manifest_version": 1,
+            "manifest_path": "",
+            "total_records": 0,
+            "embedded_records": 0,
+            "reused_records": 0,
+            "new_records": 0,
+            "changed_records": 0,
+        }
 
         if self.data.empty:
             raise NoDataFoundError("No data found in the provided DataFrame.")
@@ -104,6 +115,15 @@ class RagSearchEngine:
         # Combine textual fields into a single text column
         self.data["combined_text"] = self.data.apply(lambda row: preprocess_text(row, textual_columns), axis=1)
 
+        manifest_path = self.save_dir / f"{self.file_name}.embedding_manifest.json"
+        manifest = self._load_embedding_manifest(manifest_path)
+
+        total_records = len(self.data)
+        embedded_records = 0
+        reused_records = 0
+        new_records = 0
+        changed_records = 0
+
         # Split data into batches
         batches = [self.data.iloc[i:i + self.batch_size] for i in range(0, len(self.data), self.batch_size)]
         logging.info(f"Data split into {len(batches)} batches (batch size: {self.batch_size})")
@@ -112,12 +132,48 @@ class RagSearchEngine:
             try:
                 logging.info(f"Processing batch {batch_idx + 1} with {len(batch)} records...")
 
-                # Generate embeddings
-                response = self.embedding_model.embed(texts=batch["combined_text"].tolist())
-                embeddings = extract_embeddings(response)
+                resolved_embeddings = []
+                pending_positions = []
+                pending_texts = []
+                pending_keys = []
+                pending_hashes = []
+
+                for _, row in batch.iterrows():
+                    record_key = self._record_cache_key(row)
+                    content_hash = self._content_hash(str(row.get("combined_text", "")))
+                    cached = manifest["records"].get(record_key)
+
+                    if cached and cached.get("content_hash") == content_hash:
+                        reused_records += 1
+                        resolved_embeddings.append(cached.get("embedding", []))
+                        continue
+
+                    pending_positions.append(len(resolved_embeddings))
+                    pending_texts.append(str(row.get("combined_text", "")))
+                    pending_keys.append(record_key)
+                    pending_hashes.append(content_hash)
+                    if cached:
+                        changed_records += 1
+                    else:
+                        new_records += 1
+                    resolved_embeddings.append(None)
+
+                if pending_texts:
+                    response = self.embedding_model.embed(texts=pending_texts)
+                    new_embeddings = extract_embeddings(response)
+                    embedded_records += len(new_embeddings)
+
+                    for offset, embedding in enumerate(new_embeddings):
+                        position = pending_positions[offset]
+                        resolved_embeddings[position] = embedding
+                        manifest["records"][pending_keys[offset]] = {
+                            "content_hash": pending_hashes[offset],
+                            "embedding": [float(value) for value in embedding],
+                        }
 
                 # Add embeddings to the batch DataFrame
-                batch["embedding"] = embeddings
+                batch = batch.copy()
+                batch["embedding"] = resolved_embeddings
 
                 # Insert embeddings and metadata into the vector database
                 metadata_columns = self.data.columns.difference(["embedding"]).tolist()
@@ -126,6 +182,69 @@ class RagSearchEngine:
                 logging.info(f"Batch {batch_idx + 1} successfully stored in the vector database.")
             except Exception as e:
                 logging.error(f"Failed to process batch {batch_idx + 1}: {e}")
+
+        self._save_embedding_manifest(manifest_path, manifest)
+        self.indexing_diagnostics = {
+            "manifest_version": int(manifest.get("version", 1)),
+            "manifest_path": str(manifest_path),
+            "total_records": int(total_records),
+            "embedded_records": int(embedded_records),
+            "reused_records": int(reused_records),
+            "new_records": int(new_records),
+            "changed_records": int(changed_records),
+        }
+
+    @staticmethod
+    def _content_hash(value: str) -> str:
+        return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _record_cache_key(row: pd.Series) -> str:
+        source_path = str(row.get("source_path", "")).strip()
+        parser_name = str(row.get("parser_name", "")).strip()
+        record_id = int(row.name)
+        if source_path:
+            return f"{source_path}::{parser_name}::{record_id}"
+        return f"row::{record_id}"
+
+    @staticmethod
+    def _load_embedding_manifest(manifest_path: Path) -> Dict[str, Any]:
+        if not manifest_path.exists():
+            return {"version": 1, "records": {}}
+
+        try:
+            payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except Exception:
+            return {"version": 1, "records": {}}
+
+        records = payload.get("records") if isinstance(payload, dict) else None
+        if not isinstance(records, dict):
+            records = {}
+
+        normalized_records: Dict[str, Dict[str, Any]] = {}
+        for key, value in records.items():
+            if not isinstance(value, dict):
+                continue
+            content_hash = value.get("content_hash")
+            embedding = value.get("embedding")
+            if not isinstance(content_hash, str) or not isinstance(embedding, list):
+                continue
+            try:
+                normalized_embedding = [float(item) for item in embedding]
+            except (TypeError, ValueError):
+                continue
+            normalized_records[str(key)] = {
+                "content_hash": content_hash,
+                "embedding": normalized_embedding,
+            }
+
+        version = payload.get("version", 1) if isinstance(payload, dict) else 1
+        return {"version": int(version), "records": normalized_records}
+
+    @staticmethod
+    def _save_embedding_manifest(manifest_path: Path, manifest: Dict[str, Any]):
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
 
     def search(self, query: str, top_k: int = 5) -> List[Dict]:
         """
