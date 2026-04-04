@@ -7,8 +7,10 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from libs.ragsearch.errors import NoDataFoundError, ParseTimeoutError, RagSearchError
+from libs.ragsearch.errors import NoDataFoundError, ParseCorruptError, ParseTimeoutError, RagSearchError
 from libs.ragsearch.parsers import ParsedDocument
+from libs.ragsearch.parsers._fallback import FallbackParser
+from libs.ragsearch.parsers._liteparse import LiteParseAdapter
 from libs.ragsearch.engine import RagSearchEngine
 from libs.ragsearch.setup import setup
 
@@ -307,6 +309,106 @@ def test_setup_falls_back_to_legacy_dimension_when_probe_runtime_fails(tmp_path,
     setup(Path(data_path), llm_api_key="test-key")
 
     assert captured["embedding_dim"] == 4096
+
+
+def test_setup_unstructured_uses_fallback_when_liteparse_runtime_fails(tmp_path, monkeypatch, caplog):
+    data_path = tmp_path / "sample.txt"
+    data_path.write_text("fallback parser content", encoding="utf-8")
+    caplog.set_level("WARNING")
+
+    class DummyCohereClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def embed(self, texts):
+            class Resp:
+                embeddings = [[0.1, 0.2, 0.3]]
+
+            return Resp()
+
+    class DummyVectorDB:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    captured = {}
+
+    class DummyEngine:
+        def __init__(self, *args, **kwargs):
+            captured["data"] = kwargs["data"]
+
+    monkeypatch.setattr("libs.ragsearch.setup.CohereClient", DummyCohereClient)
+    monkeypatch.setattr("libs.ragsearch.setup.VectorDB", DummyVectorDB)
+    monkeypatch.setattr("libs.ragsearch.setup.RagSearchEngine", DummyEngine)
+
+    # Force LiteParse selection and runtime failure.
+    monkeypatch.setattr(LiteParseAdapter, "available", classmethod(lambda cls: True))
+
+    def raise_liteparse_error(self, path):
+        raise ParseTimeoutError("LiteParse timed out")
+
+    monkeypatch.setattr(LiteParseAdapter, "parse", raise_liteparse_error)
+    monkeypatch.setattr("libs.ragsearch.setup.get_parser", lambda path: LiteParseAdapter())
+
+    setup(Path(data_path), llm_api_key="test-key")
+
+    assert captured["data"].iloc[0]["text"] == "fallback parser content"
+    assert captured["data"].iloc[0]["parser_name"] == "fallback/plain_text"
+    assert "LiteParse parsing failed; using fallback parser" in caplog.text
+
+
+def test_setup_unstructured_reraises_primary_error_when_fallback_also_fails(tmp_path, monkeypatch):
+    data_path = tmp_path / "sample.txt"
+    data_path.write_text("input text", encoding="utf-8")
+
+    class DummyCohereClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    monkeypatch.setattr("libs.ragsearch.setup.CohereClient", DummyCohereClient)
+    monkeypatch.setattr(LiteParseAdapter, "available", classmethod(lambda cls: True))
+
+    def raise_liteparse_error(self, path):
+        raise ParseTimeoutError("LiteParse timed out")
+
+    def raise_fallback_error(self, path):
+        raise ParseCorruptError("Fallback failed")
+
+    monkeypatch.setattr(LiteParseAdapter, "parse", raise_liteparse_error)
+    monkeypatch.setattr(FallbackParser, "parse", raise_fallback_error)
+    monkeypatch.setattr("libs.ragsearch.setup.get_parser", lambda path: LiteParseAdapter())
+
+    with pytest.raises(ParseTimeoutError, match="LiteParse timed out"):
+        setup(Path(data_path), llm_api_key="test-key")
+
+
+def test_setup_unstructured_fallback_primary_error_propagates(tmp_path, monkeypatch):
+    data_path = tmp_path / "sample.txt"
+    data_path.write_text("input text", encoding="utf-8")
+
+    class FailingFallbackParser(FallbackParser):
+        def parse(self, path):
+            raise ParseCorruptError("Fallback primary failed")
+
+    monkeypatch.setattr("libs.ragsearch.setup.get_parser", lambda path: FailingFallbackParser())
+
+    with pytest.raises(ParseCorruptError, match="Fallback primary failed"):
+        setup(Path(data_path), llm_api_key="test-key")
+
+
+def test_setup_unstructured_reraises_liteparse_error_when_fallback_unsupported(tmp_path, monkeypatch):
+    data_path = tmp_path / "sample.png"
+    data_path.write_text("binary-like placeholder", encoding="utf-8")
+
+    monkeypatch.setattr(LiteParseAdapter, "available", classmethod(lambda cls: True))
+
+    def raise_liteparse_error(self, path):
+        raise ParseTimeoutError("LiteParse timed out")
+
+    monkeypatch.setattr(LiteParseAdapter, "parse", raise_liteparse_error)
+    monkeypatch.setattr("libs.ragsearch.setup.get_parser", lambda path: LiteParseAdapter())
+
+    with pytest.raises(ParseTimeoutError, match="LiteParse timed out"):
+        setup(Path(data_path), llm_api_key="test-key")
 
 
 def test_setup_uses_backend_factory_for_vector_backend(tmp_path, monkeypatch):

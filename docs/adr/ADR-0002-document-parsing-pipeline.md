@@ -13,14 +13,16 @@ Issue #18 introduced parser boundary abstractions and setup-path integration for
 ## Decision
 1. `LiteParseAdapter` is the preferred parser when available.
 2. `FallbackParser` is used when LiteParse is unavailable and file type is supported.
-3. Parser selection is centralized in `get_parser()`.
-4. `setup()` routes structured files through pandas and unstructured files through parser dispatch.
-5. Empty or whitespace-only parsed content is filtered before indexing.
-6. Parser failures surface typed `RagSearchError` subclasses for predictable handling.
+3. When LiteParse is selected but fails at runtime, setup retries with `FallbackParser` for fallback-supported file types.
+4. Parser selection is centralized in `get_parser()`.
+5. `setup()` routes structured files through pandas and unstructured files through parser dispatch.
+6. Empty or whitespace-only parsed content is filtered before indexing.
+7. Parser failures surface typed `RagSearchError` subclasses for predictable handling.
 
 ## Consequences
 - Better extraction quality for complex formats when LiteParse is available.
 - Graceful degradation when LiteParse or optional parser dependencies are missing.
+- Improved runtime resiliency when LiteParse fails after selection and fallback can parse the same file type.
 - Deterministic error handling for timeout, corruption, unsupported type, and unavailable parser cases.
 - Existing structured ingestion flows remain unchanged.
 
