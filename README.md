@@ -112,6 +112,7 @@ rag_engine = setup(data_path, llm_api_key)
 Parser selection behavior:
 - LiteParse is preferred when available (Node.js + npx installed).
 - If LiteParse is unavailable, fallback parser is used for supported file types.
+- If LiteParse is selected but fails at runtime, `setup()` retries with fallback parser when the file type is fallback-supported.
 - Unsupported types raise `UnsupportedFileTypeError`.
 
 Note: supported extensions can be backend-dependent. LiteParse supports additional types such as `.doc`, `.png`, `.jpg`, and `.jpeg`, while fallback parsing is intentionally narrower.
@@ -203,8 +204,8 @@ Edit `index.html` in the `templates` directory to adjust the UI layout or add mo
 | Error | Typical Cause | Resolution |
 | --- | --- | --- |
 | `ParserUnavailableError: LiteParse CLI not found` | Node.js/npx not installed, or custom CLI path invalid | Install Node.js 18+, verify `npx` works, or set `RAGSEARCH_LITEPARSE_CLI` to a valid executable |
-| `ParseTimeoutError` | Large/complex document exceeded parse timeout | Retry with smaller file; timeout tuning via `LiteParseAdapter(timeout_s=...)` applies to custom parser flows, not the default `setup()` path |
-| `ParseCorruptError` | Corrupt file or invalid parser output payload | Validate file integrity and retry; inspect parser output/logs |
+| `ParseTimeoutError` | Large/complex document exceeded parse timeout | In default `setup()` flow, timeout may be recovered automatically via fallback parser for supported types; otherwise retry with smaller file and inspect parser logs |
+| `ParseCorruptError` | Corrupt file or invalid parser output payload | In default `setup()` flow, corruption may be recovered automatically via fallback parser for supported types; if both parsers fail, the primary LiteParse error is surfaced |
 | `UnsupportedFileTypeError` | Extension not supported by the active parser backend | Convert to a supported format; fallback supports `.txt/.md/.html/.htm/.pdf/.docx`, LiteParse supports additional formats |
 | `NoDataFoundError` | File parsed but content was empty/whitespace only | Verify source file contains readable text content |
 

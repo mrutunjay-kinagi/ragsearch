@@ -23,10 +23,10 @@ import logging
 from pathlib import Path
 import pandas as pd
 from cohere import Client as CohereClient
-from .errors import NoDataFoundError, RagSearchError
+from .errors import NoDataFoundError, ParsingError, RagSearchError
 from .embedding_models import CohereEmbeddingAdapter, infer_embedding_dimension
 from .llm_clients import CohereLLMClientAdapter
-from .parsers import get_parser
+from .parsers import FallbackParser, LiteParseAdapter, get_parser
 from .vector_db import VectorDB
 from .engine import RagSearchEngine
 
@@ -68,7 +68,22 @@ def _load_unstructured_data(data_path: Path) -> pd.DataFrame:
     Integration point: Slice 1 parser contract (see docs/adr/ADR-0000-top-10-architecture-questions.md).
     """
     parser = get_parser(data_path)
-    documents = list(parser.parse(data_path))
+    try:
+        documents = list(parser.parse(data_path))
+    except ParsingError as exc:
+        # If LiteParse fails at runtime, attempt supported fallback parsing.
+        if isinstance(parser, LiteParseAdapter):
+            fallback = FallbackParser()
+            if fallback.supports(data_path):
+                logger.warning("LiteParse parsing failed; using fallback parser: %s", exc)
+                try:
+                    documents = list(fallback.parse(data_path))
+                except ParsingError as fallback_exc:
+                    raise exc from fallback_exc
+            else:
+                raise
+        else:
+            raise
     if not documents:
         raise NoDataFoundError(f"No data found in parsed input file: {data_path}")
 
