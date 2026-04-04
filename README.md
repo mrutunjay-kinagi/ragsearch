@@ -115,6 +115,13 @@ Parser selection behavior:
 - If LiteParse is selected but fails at runtime, `setup()` retries with fallback parser when the file type is fallback-supported.
 - Unsupported types raise `UnsupportedFileTypeError`.
 
+Ingestion diagnostics:
+- After `setup()`, the engine exposes `rag_engine.ingestion_diagnostics` with deterministic per-file fields:
+    - `source_path`: input file path used for setup.
+    - `selected_parser`: `structured/pandas`, `liteparse`, or `fallback`.
+    - `status`: `success` or `recovered_with_fallback`.
+    - `failure_reason`: empty string on success; primary parser error message when fallback recovery is used.
+
 Note: supported extensions can be backend-dependent. LiteParse supports additional types such as `.doc`, `.png`, `.jpg`, and `.jpeg`, while fallback parsing is intentionally narrower.
 
 ### Step 3: Run a Search Query

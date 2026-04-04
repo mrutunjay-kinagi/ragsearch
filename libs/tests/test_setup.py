@@ -311,6 +311,38 @@ def test_setup_falls_back_to_legacy_dimension_when_probe_runtime_fails(tmp_path,
     assert captured["embedding_dim"] == 4096
 
 
+def test_setup_exposes_structured_ingestion_diagnostics(tmp_path, monkeypatch):
+    data_path = tmp_path / "sample.csv"
+    data_path.write_text("name,description\na,b\n", encoding="utf-8")
+
+    class DummyCohereClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def embed(self, texts):
+            class Resp:
+                embeddings = [[0.1, 0.2, 0.3]]
+
+            return Resp()
+
+    class DummyEngine:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    monkeypatch.setattr("libs.ragsearch.setup.CohereClient", DummyCohereClient)
+    monkeypatch.setattr("libs.ragsearch.setup.build_vector_backend", lambda **kwargs: object())
+    monkeypatch.setattr("libs.ragsearch.setup.RagSearchEngine", DummyEngine)
+
+    engine = setup(Path(data_path), llm_api_key="test-key")
+
+    assert engine.ingestion_diagnostics == {
+        "source_path": str(data_path),
+        "selected_parser": "structured/pandas",
+        "status": "success",
+        "failure_reason": "",
+    }
+
+
 def test_setup_unstructured_uses_fallback_when_liteparse_runtime_fails(tmp_path, monkeypatch, caplog):
     data_path = tmp_path / "sample.txt"
     data_path.write_text("fallback parser content", encoding="utf-8")
@@ -349,11 +381,17 @@ def test_setup_unstructured_uses_fallback_when_liteparse_runtime_fails(tmp_path,
     monkeypatch.setattr(LiteParseAdapter, "parse", raise_liteparse_error)
     monkeypatch.setattr("libs.ragsearch.setup.get_parser", lambda path: LiteParseAdapter())
 
-    setup(Path(data_path), llm_api_key="test-key")
+    engine = setup(Path(data_path), llm_api_key="test-key")
 
     assert captured["data"].iloc[0]["text"] == "fallback parser content"
     assert captured["data"].iloc[0]["parser_name"] == "fallback/plain_text"
     assert "LiteParse parsing failed; using fallback parser" in caplog.text
+    assert engine.ingestion_diagnostics == {
+        "source_path": str(data_path),
+        "selected_parser": "fallback",
+        "status": "recovered_with_fallback",
+        "failure_reason": "LiteParse timed out",
+    }
 
 
 def test_setup_unstructured_reraises_primary_error_when_fallback_also_fails(tmp_path, monkeypatch):
