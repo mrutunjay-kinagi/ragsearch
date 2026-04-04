@@ -181,8 +181,8 @@ def setup(data_path: Path,
     else:
         try:
             embedding_dim = infer_embedding_dimension(embedding_model)
-        except (ValueError, TypeError, AttributeError) as exc:
-            # Preserve legacy fallback behavior when the provider probe shape is invalid.
+        except Exception as exc:
+            # Preserve legacy fallback behavior when probe-time inference fails.
             logger.warning("Falling back to legacy embedding dimension 4096: %s", exc)
             embedding_dim = 4096
         try:

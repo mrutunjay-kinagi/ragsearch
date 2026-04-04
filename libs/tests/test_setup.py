@@ -277,3 +277,33 @@ def test_setup_falls_back_to_legacy_dimension_when_probe_shape_is_invalid(tmp_pa
     setup(Path(data_path), llm_api_key="test-key")
 
     assert captured["embedding_dim"] == 4096
+
+
+def test_setup_falls_back_to_legacy_dimension_when_probe_runtime_fails(tmp_path, monkeypatch):
+    data_path = tmp_path / "sample.csv"
+    data_path.write_text("name,description\na,b\n", encoding="utf-8")
+
+    class DummyCohereClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def embed(self, texts):
+            raise RuntimeError("provider temporarily unavailable")
+
+    captured = {}
+
+    class CapturingVectorDB:
+        def __init__(self, embedding_dim):
+            captured["embedding_dim"] = embedding_dim
+
+    class DummyEngine:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    monkeypatch.setattr("libs.ragsearch.setup.CohereClient", DummyCohereClient)
+    monkeypatch.setattr("libs.ragsearch.setup.VectorDB", CapturingVectorDB)
+    monkeypatch.setattr("libs.ragsearch.setup.RagSearchEngine", DummyEngine)
+
+    setup(Path(data_path), llm_api_key="test-key")
+
+    assert captured["embedding_dim"] == 4096
