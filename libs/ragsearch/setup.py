@@ -25,14 +25,20 @@ import pandas as pd
 from cohere import Client as CohereClient
 from .errors import NoDataFoundError, RagSearchError
 from .embedding_models import CohereEmbeddingAdapter, infer_embedding_dimension
+from .llm_clients import CohereLLMClientAdapter
 from .parsers import get_parser
-from .vector_db import VectorDB, query_chromadb
+from .vector_db import VectorDB
 from .engine import RagSearchEngine
 
 
 # File types loaded directly via pandas (no parser dispatch needed)
 STRUCTURED_EXTENSIONS = {".csv", ".json", ".parquet", ".pq"}
 logger = logging.getLogger(__name__)
+
+
+def build_vector_backend(*, embedding_dim: int):
+    """Build the default vector backend while preserving legacy setup behavior."""
+    return VectorDB(embedding_dim=embedding_dim)
 
 
 def _load_structured_data(data_path: Path) -> pd.DataFrame:
@@ -160,8 +166,9 @@ def setup(data_path: Path,
     
     # Initialize Cohere client
     try:
-        llm_client = CohereClient(api_key=llm_api_key)
-        embedding_model = CohereEmbeddingAdapter(llm_client)
+        raw_llm_client = CohereClient(api_key=llm_api_key)
+        llm_client = CohereLLMClientAdapter(raw_llm_client)
+        embedding_model = CohereEmbeddingAdapter(raw_llm_client)
     except Exception as e:
         raise RuntimeError(f"Failed to initialize Cohere client: {e}")
 
@@ -186,7 +193,7 @@ def setup(data_path: Path,
             logger.warning("Falling back to legacy embedding dimension 4096: %s", exc)
             embedding_dim = 4096
         try:
-            vector_db = VectorDB(embedding_dim=embedding_dim)
+            vector_db = build_vector_backend(embedding_dim=embedding_dim)
         except Exception as e:
             raise RuntimeError(f"Failed to connect to vector database: {e}")
         engine = RagSearchEngine(

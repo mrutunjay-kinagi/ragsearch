@@ -3,17 +3,18 @@ This module contains the RAGSearchEngine class,
 which is responsible for initializing the RAG Search Engine
 """
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict
 import pandas as pd
 from .errors import NoDataFoundError
 from .embedding_models import EmbeddingModel, extract_embeddings
+from .llm_clients import LLMClient
 from .utils import (extract_textual_columns,
                     preprocess_search_text,
                     preprocess_text,
                     insert_embeddings_to_vector_db,
                     search_vector_db,
                     log_data_summary)
-from .vector_db import VectorDB
+from .vector_backends import VectorBackend
 from flask import Flask, request, jsonify, render_template
 import threading
 from pathlib import Path
@@ -38,8 +39,8 @@ class RagSearchEngine:
     def __init__(self,
                  data: pd.DataFrame,
                  embedding_model: EmbeddingModel,
-                 llm_client: Any,
-                 vector_db: VectorDB = None,
+                 llm_client: LLMClient,
+                 vector_db: VectorBackend = None,
                  batch_size: int = 100,
                  save_dir: str = "embeddings",
                  file_name: str = "data.csv",
@@ -51,7 +52,7 @@ class RagSearchEngine:
         Args:
             data (pd.DataFrame): The input data containing structured information.
             embedding_model (EmbeddingModel): Embedding provider implementing the embedding contract.
-            llm_client (Any): The client for interacting with the LLM.
+            llm_client (LLMClient): Baseline generation client implementing the LLM contract.
             vector_db (VectorDB): The vector database for storing and querying embeddings.
             batch_size (int): Number of rows to process in each batch.
             save_dir (str): Directory to save intermediate embeddings.
