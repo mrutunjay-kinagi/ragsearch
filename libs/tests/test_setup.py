@@ -660,3 +660,50 @@ def test_setup_wraps_llm_client_with_protocol_adapter(tmp_path, monkeypatch):
     setup(Path(data_path), llm_api_key="test-key")
 
     assert hasattr(captured["llm_client"], "generate")
+
+
+def test_setup_passes_retrieval_quality_hooks_to_engine(tmp_path, monkeypatch):
+    data_path = tmp_path / "sample.csv"
+    data_path.write_text("name,description\na,b\n", encoding="utf-8")
+
+    class DummyCohereClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def embed(self, texts):
+            class Resp:
+                embeddings = [[0.1, 0.2, 0.3]]
+
+            return Resp()
+
+    class DummyChunkingStrategy:
+        def chunk_text(self, text):
+            return [text]
+
+    class DummyReranker:
+        def rerank(self, query, results):
+            return results
+
+    captured = {}
+
+    class DummyEngine:
+        def __init__(self, *args, **kwargs):
+            captured["chunking_strategy"] = kwargs.get("chunking_strategy")
+            captured["reranker"] = kwargs.get("reranker")
+
+    chunking_strategy = DummyChunkingStrategy()
+    reranker = DummyReranker()
+
+    monkeypatch.setattr("libs.ragsearch.setup.CohereClient", DummyCohereClient)
+    monkeypatch.setattr("libs.ragsearch.setup.build_vector_backend", lambda **kwargs: object())
+    monkeypatch.setattr("libs.ragsearch.setup.RagSearchEngine", DummyEngine)
+
+    setup(
+        Path(data_path),
+        llm_api_key="test-key",
+        chunking_strategy=chunking_strategy,
+        reranker=reranker,
+    )
+
+    assert captured["chunking_strategy"] is chunking_strategy
+    assert captured["reranker"] is reranker

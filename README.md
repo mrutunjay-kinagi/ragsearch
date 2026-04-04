@@ -140,6 +140,35 @@ Incremental indexing behavior (FAISS backend):
 Optional setup parameter:
 - `embeddings_dir`: custom directory for embedding artifacts and incremental manifest cache.
 
+Retrieval quality hooks (optional):
+- `chunking_strategy`: controls how each record is split before embedding/indexing.
+- `reranker`: post-processes retrieval results before they are returned.
+- Defaults are backward-compatible:
+    - row-level chunking (`RowChunkingStrategy`)
+    - no-op reranking (`NoOpReranker`)
+
+Example hook usage:
+
+```python
+from ragsearch import setup
+from ragsearch.chunking import FixedWordChunkingStrategy
+
+class ReverseReranker:
+    def rerank(self, query: str, results: list[dict]) -> list[dict]:
+        return list(reversed(results))
+
+rag_engine = setup(
+    data_path,
+    llm_api_key,
+    chunking_strategy=FixedWordChunkingStrategy(words_per_chunk=120),
+    reranker=ReverseReranker(),
+)
+```
+
+Notes:
+- Keep hooks disabled unless you are actively tuning retrieval quality.
+- Chunking strategy changes can alter indexed record boundaries and retrieval behavior.
+
 ### Step 3: Run a Search Query
 Once the `ragsearch` is initialized, you can perform natural language searches.
 
