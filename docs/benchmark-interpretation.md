@@ -142,7 +142,7 @@ for result in summary["results"]:
 
 ## Saving Benchmark Results
 
-Benchmark runner scripts in this repository can persist outputs under `.benchmarks/runs/<timestamp>_*/` and aggregate history in `.benchmarks/history/metrics.csv`.
+Benchmark runner scripts in this repository can persist outputs under `.benchmarks/runs/<timestamp>_*/` and aggregate history in `.benchmarks/history/metrics.csv`. The notebook shows the evaluation summary shape, but persistence is still handled outside the notebook.
 
 ```bash
 python -m ragsearch.evaluation \

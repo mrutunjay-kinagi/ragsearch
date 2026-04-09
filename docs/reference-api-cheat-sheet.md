@@ -109,9 +109,8 @@ Retrieve top-k most similar records to a query.
       "...original DataFrame columns except 'embedding'..."
     },
     "citation": {
-      "record_id": 0,                    # Row index in original data
-      "source_path": "public:titanic.csv",  # Source identifier
-      "parser_name": "fallback/csv",     # Parser used
+      "record_id": 0,                    # Engine-specific row identifier
+      "source_path": "data.csv",        # Source identifier
       "excerpt": "Name: Smith | Age: 25 | ..."  # First 200 chars of text
     },
     "similarity": 0.95                 # Similarity score; higher means more similar
@@ -150,7 +149,7 @@ Generate a grounded answer to a question using retrieved sources.
   "citations": [
     # ... citation objects only (see citation structure above)
   ],
-  "context": "[1] source_path: public:titanic.csv...\\n\\n[2]..."  # Formatted for LLM
+  "context": "[1] source_path: ...\\n\\n[2]..."  # Formatted for LLM
 }
 ```
 
