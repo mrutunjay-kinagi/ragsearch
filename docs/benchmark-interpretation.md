@@ -41,8 +41,7 @@ Understanding `.benchmarks/` outputs, metrics, and trend analysis.
   "observed_citations": 5,          // Citations generated
   "expected_min_results": 1,        // Threshold: minimum required
   "expected_min_citations": 1,      // Threshold: minimum required
-  "pass": true,                     // met? Both observed >= expected
-  "top_citation": { "..." }        // First citation object
+  "passed": true                   // met? Both observed >= expected
 }
 ```
 
@@ -68,7 +67,7 @@ See [Citation Mismatch](./troubleshooting.md#citation-does-not-match-answer) for
 
 ## Reading metrics.csv
 
-```csv
+```text
 run_id,timestamp,dataset,total_cases,passed_cases,failed_cases,pass
 20260409-235448_public_titanic,2026-04-09T23:54:48,Titanic (datasciencedojo),3,3,0,True
 20260409-235447_dataset,2026-04-09T23:54:47,Local CSV,3,3,0,True
@@ -129,7 +128,7 @@ run_dir = Path(".benchmarks/runs/20260409-235448_public_titanic")
 summary = json.loads((run_dir / "summary.json").read_text())
 
 for result in summary["results"]:
-    if not result["pass"]:
+  if not result["passed"]:
         print(f"Failed: {result['query']}")
         print(f"  Expected: {result['expected_min_results']} results")
         print(f"  Got: {result['observed_results']}")
@@ -143,7 +142,7 @@ for result in summary["results"]:
 
 ## Saving Benchmark Results
 
-Benchmark runs are automatically saved when using the evaluation CLI:
+Benchmark runner scripts in this repository can persist outputs under `.benchmarks/runs/<timestamp>_*/` and aggregate history in `.benchmarks/history/metrics.csv`.
 
 ```bash
 python -m ragsearch.evaluation \
@@ -151,7 +150,7 @@ python -m ragsearch.evaluation \
   --cases eval_cases.json
 ```
 
-Results appear in `.benchmarks/runs/<timestamp>_*/`
+The evaluation CLI itself prints the summary JSON to stdout; persistence is handled by the runner that invokes it.
 
 ## Next Steps
 

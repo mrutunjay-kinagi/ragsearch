@@ -7,6 +7,7 @@ Welcome to ragsearch's Documentation!
 
    quickstart
    cookbook-dataset-analytics
+   INDEX
 
 .. toctree::
    :maxdepth: 2
@@ -17,10 +18,17 @@ Welcome to ragsearch's Documentation!
    benchmark-interpretation
 
 .. toctree::
-   :maxdepth: 2
-   :caption: API Reference:
+   :maxdepth: 1
+   :hidden:
 
-   source/modules
+   adr/README
+   adr/ADR-0002-document-parsing-pipeline
+   adr/ADR-0003-embedding-model-abstraction
+   adr/ADR-0004-llm-provider-registry
+   adr/ADR-0005-retrieval-generation-pipeline
+   adr/ADR-0006-incremental-indexing-manifest
+   adr/ADR-0007-retrieval-quality-hooks
+   adr/ADR-0008-observability-evaluation-baseline
 
 .. include:: ../README.rst
 

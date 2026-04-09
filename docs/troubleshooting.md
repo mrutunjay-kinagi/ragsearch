@@ -36,10 +36,12 @@ print(engine.indexing_diagnostics)
 
 3. Use a better embedding model:
 ```python
+from pathlib import Path
+
 engine = setup(
-    "data.csv",
+    Path("data.csv"),
+    llm_api_key="...",
     embedding_provider="sentence_transformers",  # Better than dummy
-    llm_api_key="..."  # Still needed for generation
 )
 ```
 
@@ -62,11 +64,13 @@ engine = setup(
 1. Use a stronger embedding model:
 ```python
 # Production: Real semantic embeddings
+from pathlib import Path
+
 engine = setup(
-    "data.csv",
-    embedding_provider="openai",
+    Path("data.csv"),
     llm_api_key="sk-...",
-    embedding_model="text-embedding-3-small"
+    embedding_provider="openai",
+    embedding_model_name="text-embedding-3-small"
 )
 ```
 
@@ -96,7 +100,7 @@ pip install /path/to/ragsearch
 ### "API key invalid" or provider not found
 
 **Solution:**
-```python
+```bash
 # Check that required packages are installed:
 pip install cohere           # For Cohere
 pip install openai           # For OpenAI
@@ -125,7 +129,9 @@ print(len(df), df.columns)
 
 1. Reduce batch size for memory-constrained environments:
 ```python
-engine = setup("data.csv", batch_size=50)
+from pathlib import Path
+
+engine = setup(Path("data.csv"), llm_api_key="...")
 ```
 
 2. Use FAISS (default) instead of ChromaDB for faster in-memory search.

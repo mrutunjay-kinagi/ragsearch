@@ -17,6 +17,7 @@ This cookbook demonstrates how to:
 
 ```python
 import pandas as pd
+from pathlib import Path
 
 # Load CSV data (or Parquet/JSON)
 df = pd.read_csv("recipes.csv")
@@ -35,13 +36,13 @@ from ragsearch import setup
 
 # Setup with Cohere embeddings (default)
 engine = setup(
-    data_path="recipes.csv",
+    data_path=Path("recipes.csv"),
     llm_api_key="your-cohere-api-key",
     embedding_provider="cohere",
     llm_provider="cohere"
 )
 # Or use sentence-transformers for local embeddings:
-# engine = setup("recipes.csv", embedding_provider="sentence_transformers")
+# engine = setup(Path("recipes.csv"), llm_api_key="your-cohere-api-key", embedding_provider="sentence_transformers")
 ```
 
 ### Step 3: Query and Answer
@@ -113,7 +114,7 @@ summary = run_regression_gates(
 
 print(f"Passed: {summary['passed_cases']}/{summary['total_cases']}")
 for result in summary["results"]:
-    status = "✓" if result["pass"] else "✗"
+    status = "✓" if result["passed"] else "✗"
     print(f"{status} {result['query']}: {result['observed_results']} results")
 ```
 
@@ -131,15 +132,17 @@ If your data includes unstructured files (HTML, PDF, DOCX, TXT):
 
 ```python
 from ragsearch import setup
+from pathlib import Path
 
-# Parser fallback chain: LiteParse → fallback parsers
+# Parser fallback chain: LiteParse -> fallback parsers
 # LiteParse used if available; fallback used otherwise
 engine = setup(
-    data_path="path/to/mixed_data.json",  # Can include file refs
-    llm_api_key="...",
+    data_path=Path("path/to/your/report.pdf"),
+    llm_api_key="your-cohere-api-key",
 )
 
-# The engine automatically handles parsing based on file type
+# The engine automatically handles parsing based on file type.
+# Structured JSON/CSV/Parquet inputs are loaded directly by pandas.
 ```
 
 ## Observability and Debugging
@@ -170,16 +173,15 @@ for event in events[-5:]:  # Last 5 events
 
 ### Persist Run Results
 
-The `.benchmarks/` directory tracks all evaluation runs:
+The `.benchmarks/` directory is intended for benchmark-run artifacts and history produced by dedicated runner scripts:
 
 ```python
-from datetime import datetime
 from pathlib import Path
 import json
 
-# Your benchmark results are automatically saved in:
-# .benchmarks/runs/<timestamp>_<name>/summary.json
-# .benchmarks/history/metrics.csv
+# The lightweight evaluation CLI returns a JSON summary.
+# If you persist run outputs, store them under .benchmarks/runs/<timestamp>_<name>/
+# and aggregate history under .benchmarks/history/metrics.csv.
 
 # Review trends
 import pandas as pd

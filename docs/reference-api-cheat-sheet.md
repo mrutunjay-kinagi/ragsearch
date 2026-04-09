@@ -11,18 +11,23 @@ Factory function to initialize a RAG engine with data and providers.
 ```python
 from ragsearch import setup
 
-engine = setup(
-    data_path: str | Path,
-    llm_api_key: str = None,
-    embedding_provider: str = "cohere",
-    llm_provider: str = "cohere",
-    embedding_model: str = None,
-    llm_model: str = None,
-    use_chromadb: bool = False,
-    chromadb_sqlite_path: str = None,
-    chromadb_collection_name: str = None,
-    batch_size: int = 100,
-    save_dir: str = "embeddings",
+setup(
+  data_path: Path,
+  llm_api_key: str,
+  use_chromadb: bool = False,
+  chromadb_sqlite_path: str = None,
+  chromadb_collection_name: str = None,
+  embeddings_dir: str = None,
+  chunking_strategy: ChunkingStrategy = None,
+  reranker: Reranker = None,
+  observability_max_events: int = 1000,
+  embedding_provider: str = "cohere",
+  embedding_model_name: str = None,
+  embedding_api_key: str = None,
+  embedding_base_url: str = None,
+  llm_provider: str = "cohere",
+  llm_model_name: str = None,
+  llm_base_url: str = None,
 ) -> RagSearchEngine
 ```
 
@@ -30,37 +35,56 @@ engine = setup(
 
 | Parameter | Type | Default | Notes |
 |-----------|------|---------|-------|
-| `data_path` | str/Path | required | CSV, JSON, or Parquet file |
-| `llm_api_key` | str | None | Required unless using Ollama |
+| `data_path` | Path | required | CSV, JSON, or Parquet file |
+| `llm_api_key` | str | required | Required by the current setup contract |
 | `embedding_provider` | str | "cohere" | Options: "cohere", "sentence_transformers", "openai", "ollama" |
 | `llm_provider` | str | "cohere" | Options: "cohere", "openai", "ollama" |
 | `use_chromadb` | bool | False | Use ChromaDB instead of FAISS |
-| `batch_size` | int | 100 | Rows per embedding batch |
+| `embeddings_dir` | str | None | Directory for embedding manifests and cache files |
+| `chunking_strategy` | ChunkingStrategy | None | Optional retrieval chunking strategy |
+| `reranker` | Reranker | None | Optional result reranker |
+| `observability_max_events` | int | 1000 | Max retained in-memory observability events |
+| `embedding_model_name` | str | None | Provider-specific embedding model name |
+| `embedding_api_key` | str | None | Optional embedding-provider API key override |
+| `embedding_base_url` | str | None | Optional embedding-provider base URL |
+| `llm_model_name` | str | None | Provider-specific chat model name |
+| `llm_base_url` | str | None | Optional LLM base URL |
 
 **Returns:** Initialized `RagSearchEngine` ready for queries.
 
+**Notes:**
+- `setup()` currently enforces `data_path` as a `Path` object.
+- The parameter names above match the live public contract (`embedding_model_name`, `llm_model_name`, `embeddings_dir`).
+
 **Example – Cohere (default):**
 ```python
-engine = setup("data.csv", llm_api_key="your-api-key")
+from pathlib import Path
+
+engine = setup(Path("data.csv"), llm_api_key="your-api-key")
 ```
 
 **Example – Local embeddings:**
 ```python
+from pathlib import Path
+
 engine = setup(
-    "data.csv",
-    embedding_provider="sentence_transformers"
+  Path("data.csv"),
+  llm_api_key="your-api-key",
+  embedding_provider="sentence_transformers",
 )
 ```
 
 **Example – OpenAI provider:**
 ```python
+from pathlib import Path
+
 engine = setup(
-    "data.csv",
+  Path("data.csv"),
     llm_api_key="sk-...",
     embedding_provider="openai",
     llm_provider="openai",
-    embedding_model="text-embedding-3-small",
-    llm_model="gpt-4o-mini"
+  embedding_model_name="text-embedding-3-small",
+  llm_model_name="gpt-4o-mini"
 )
 ```
 
@@ -90,7 +114,7 @@ Retrieve top-k most similar records to a query.
       "parser_name": "fallback/csv",     # Parser used
       "excerpt": "Name: Smith | Age: 25 | ..."  # First 200 chars of text
     },
-    "similarity": 0.95                 # Cosine similarity [0.0-1.0]
+    "similarity": 0.95                 # Similarity score; higher means more similar
   },
   # ... more results
 ]
@@ -179,7 +203,7 @@ summary = run_regression_gates(
             "observed_citations": 5,
             "expected_min_results": 1,
             "expected_min_citations": 1,
-            "pass": True
+          "passed": True
         },
         # ... one per case
     ]
@@ -238,7 +262,7 @@ json.dump(result, open("answer.json", "w"))
 
 ### Benchmark Tracking
 
-Results are automatically saved to `.benchmarks/` when using the evaluation CLI.
+The evaluation CLI prints a JSON summary to stdout. Dedicated benchmark runner scripts in this repository may persist summaries and history under `.benchmarks/`.
 
 See [Benchmark Interpretation](./benchmark-interpretation.md) for details.
 
