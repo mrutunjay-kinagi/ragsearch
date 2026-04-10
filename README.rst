@@ -48,7 +48,7 @@ metadata.
 
 **Example data (``sample_data.csv``)**:
 
-.. code:: csv
+.. code:: text
 
    name,id,minutes,contributor_id,submitted,tags,n_steps,steps,description,ingredients,n_ingredients,average_rating,votes,Score,calories,total fat (PDV),sugar (PDV),sodium (PDV),protein (PDV),saturated fat (PDV),carbohydrates (PDV),category,meal_type,cuisine,difficulty
    baked ham glazed with pineapple and chipotle peppers,146558,85,58104,2005-11-28,"['ham', 'time-to-make', 'course', 'main-ingredient', 'cuisine', 'preparation', 'occasion', 'north-american', 'lunch', 'main-dish', 'pork', 'american', 'mexican', 'southwestern-united-states', 'tex-mex', 'oven', 'holiday-event', 'easter', 'stove-top', 'spicy', 'christmas', 'meat', 'taste-mood', 'sweet', 'equipment', 'presentation', 'served-hot', '4-hours-or-less']",7,"['mix cornstarch with a little cold water to dissolve', 'place all ingredients except for ham in a blender and blend smooth , in a small saucepan over medium heat bring to a boil them simmer till thickened', 'preheat oven to 375 f', 'place ham , cut end down , in a large baking pan and score skin', 'bake ham for 15 minutes', 'brush glaze over ham and bake for another hour or until internal temperature reads 140 f', 'baste half way through baking']","sweet, smokey and spicy! go ahead and leave the seeds in if you enjoy the heat.","['smoked ham', 'brown sugar', 'crushed pineapple', 'chipotle chile in adobo', 'adobo sauce', 'nutmeg', 'fresh ginger', 'cornstarch', 'salt']",9,5.0,27,4.852754009963201,712.5,50.0,127.0,207.0,131.0,55.0,12.0,Non-veg,Lunch,North-American,2.65
@@ -160,7 +160,7 @@ Advanced Usage and Customization
 --------------------------------
 
 Using ChromaDB Backend
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
 To use ChromaDB, set ``use_chromadb=True`` and provide the path to your ChromaDB SQLite file and collection name. This enables persistent, scalable vector search.
 
 Changing the Embedding Model

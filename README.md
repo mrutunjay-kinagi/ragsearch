@@ -2,6 +2,22 @@
 
 `ragsearch` is a Python library designed for building a Retrieval-Augmented Generation (RAG) application that enables natural language querying over both structured and unstructured data. This tool leverages embedding models and a vector database (FAISS or ChromaDB) to provide an efficient and scalable search engine.
 
+---
+
+## 🚀 Start Here
+
+**New to ragsearch?** Get up and running in ≤10 minutes:
+
+👉 **[Quickstart Guide](./docs/quickstart.md)** – Build a working RAG system with a public Titanic dataset. No setup required beyond `pip install`.
+
+**Then explore deeper:**
+- 📖 [Dataset Analytics Cookbook](./docs/cookbook-dataset-analytics.md) – End-to-end workflow examples with a Jupyter notebook.
+- 🔍 [API Reference & Cheat Sheet](./docs/reference-api-cheat-sheet.md) – Full contract documentation and usage patterns.
+- ❓ [Troubleshooting Guide](./docs/troubleshooting.md) – Common issues and how to solve them.
+- 📊 [Benchmark Interpretation](./docs/benchmark-interpretation.md) – Understanding evaluation results and metrics.
+
+---
+
 ## Features
 - Seamless integration with the Cohere AI LLM for generating embeddings.
 - Utilizes FAISS for fast, in-memory vector storage and similarity search.
