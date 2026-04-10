@@ -35,7 +35,7 @@ setup(
 
 | Parameter | Type | Default | Notes |
 |-----------|------|---------|-------|
-| `data_path` | Path | required | CSV, JSON, or Parquet file |
+| `data_path` | Path | required | Structured (CSV/JSON/Parquet) or supported unstructured file path |
 | `llm_api_key` | str | required | Required by the current setup contract |
 | `embedding_provider` | str | "cohere" | Options: "cohere", "sentence_transformers", "openai", "ollama" |
 | `llm_provider` | str | "cohere" | Options: "cohere", "openai", "ollama" |
@@ -109,9 +109,9 @@ Retrieve top-k most similar records to a query.
       "...original DataFrame columns except 'embedding'..."
     },
     "citation": {
-      "record_id": 0,                    # Row index in original data
-      "source_path": "public:titanic.csv",  # Source identifier
-      "parser_name": "fallback/csv",     # Parser used
+      "record_id": 0,                    # Retrieved row/index identifier
+      "source_path": "...",             # Optional source identifier
+      "parser_name": "...",             # Optional parser identifier
       "excerpt": "Name: Smith | Age: 25 | ..."  # First 200 chars of text
     },
     "similarity": 0.95                 # Similarity score; higher means more similar

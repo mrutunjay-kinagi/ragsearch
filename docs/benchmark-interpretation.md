@@ -50,7 +50,7 @@ Understanding `.benchmarks/` outputs, metrics, and trend analysis.
 ### What "Pass" Means ✓
 
 1. Retrieved ≥ `min_results` documents
-2. Generated citations for all results
+2. Generated citations meeting `min_citations` threshold
 3. No crashes or exceptions
 4. Deterministic thresholds met
 
@@ -94,7 +94,7 @@ print(metrics["pass"].value_counts())  # Pass rate
 }
 ```
 
-✓ All test cases met thresholds. Safe to merge code changes.
+✓ All test cases met thresholds. Proceed with normal review and test gates.
 
 ### Example 2: Failed Run
 
@@ -109,7 +109,7 @@ print(metrics["pass"].value_counts())  # Pass rate
       "query": "rare query",
       "observed_results": 0,  // ← Failed: no results
       "expected_min_results": 1,
-      "pass": false
+      "passed": false
     },
     // ...
   ]
