@@ -19,7 +19,7 @@ Welcome to ragsearch's Documentation!
 
 .. toctree::
    :maxdepth: 1
-   :hidden:
+   :caption: Architecture Decisions:
 
    adr/README
    adr/ADR-0002-document-parsing-pipeline

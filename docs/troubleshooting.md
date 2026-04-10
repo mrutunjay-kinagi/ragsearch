@@ -47,6 +47,7 @@ engine = setup(
 
 ---
 
+(citation-does-not-match-answer)=
 ## Citation Does Not Match Answer
 
 **Problem:** Generated answer looks correct, but cited source seems wrong.
@@ -127,12 +128,13 @@ print(len(df), df.columns)
 
 **Solutions:**
 
-1. Reduce batch size for memory-constrained environments:
+1. Reduce input size for memory-constrained environments:
 ```python
 from pathlib import Path
 
 engine = setup(Path("data.csv"), llm_api_key="...")
 ```
+    For very large files, pre-split source data and index in smaller chunks.
 
 2. Use FAISS (default) instead of ChromaDB for faster in-memory search.
 
@@ -151,7 +153,7 @@ engine = setup(Path("data.csv"), llm_api_key="...")
 ```python
 summary = run_regression_gates(engine, cases, thresholds)
 for result in summary['results']:
-    if not result['pass']:
+    if not result['passed']:
         print(f"Failed: {result['query']}")
         print(f"  Expected {result['expected_min_results']} results, got {result['observed_results']}")
         print(f"  Expected {result['expected_min_citations']} citations, got {result['observed_citations']}")
@@ -168,7 +170,7 @@ for result in summary['results']:
 
 1. **Keyword embeddings** (demo model) are brittle; use real embeddings in production
 2. **Source accuracy** depends on embedding model; always verify manually
-3. **ChromaDB persistence** requires explicit save calls; check `.benchmarks/` for artifacts
+3. **Benchmark artifacts** in `.benchmarks/` are produced by the benchmark runner scripts, not by search calls
 
 ---
 

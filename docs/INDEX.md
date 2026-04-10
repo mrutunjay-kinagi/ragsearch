@@ -15,8 +15,7 @@ Complete guide to retrieval-augmented generation with ragsearch.
 | Document | Purpose | Audience |
 |----------|---------|----------|
 | [Quickstart Guide](./quickstart.md) | Get up and running in 5 minutes | New users |
-| [Cookbook: Dataset Analytics](./cookbook-dataset-analytics.md) | Real-world example with recipe data | All users |
-| [Interactive Notebook](./notebook-dataset-analytics.ipynb) | Executable companion walkthrough | Hands-on users |
+| [Cookbook: Dataset Analytics](./cookbook-dataset-analytics.md) | Real-world example with Titanic data | All users |
 | [API Reference & Cheat Sheet](./reference-api-cheat-sheet.md) | Complete API contract and schemas | Developers |
 
 ### Troubleshooting & Quality

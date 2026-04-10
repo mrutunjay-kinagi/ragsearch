@@ -63,7 +63,7 @@ Understanding `.benchmarks/` outputs, metrics, and trend analysis.
 
 **Important:** Answer quality and source accuracy must be validated manually.
 
-See [Citation Mismatch](./troubleshooting.md#citation-does-not-match-answer) for details.
+See [Citation Mismatch](./troubleshooting.md) for details.
 
 ## Reading metrics.csv
 
@@ -142,7 +142,7 @@ for result in summary["results"]:
 
 ## Saving Benchmark Results
 
-Benchmark runner scripts in this repository can persist outputs under `.benchmarks/runs/<timestamp>_*/` and aggregate history in `.benchmarks/history/metrics.csv`. The notebook shows the evaluation summary shape, but persistence is still handled outside the notebook.
+Benchmark runner scripts in this repository can persist outputs under `.benchmarks/runs/<timestamp>_*/` and aggregate history in `.benchmarks/history/metrics.csv`.
 
 ```bash
 python -m ragsearch.evaluation \
@@ -161,4 +161,4 @@ The evaluation CLI itself prints the summary JSON to stdout; persistence is hand
 
 ---
 
-**See also:** [API Reference](./reference-api-cheat-sheet.md#evaluation-and-benchmarking) | [Quickstart Guide](./quickstart.md) | [Troubleshooting](./troubleshooting.md)
+**See also:** [API Reference](./reference-api-cheat-sheet.md) | [Quickstart Guide](./quickstart.md) | [Troubleshooting](./troubleshooting.md)
