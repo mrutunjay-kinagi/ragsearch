@@ -1,11 +1,29 @@
 # ragsearch
 
-`ragsearch` is a Python library designed for building a Retrieval-Augmented Generation (RAG) application that enables natural language querying over structured data. This tool leverages embedding models and a vector database (FAISS or ChromaDB) to provide an efficient and scalable search engine.
+`ragsearch` is a Python library designed for building a Retrieval-Augmented Generation (RAG) application that enables natural language querying over both structured and unstructured data. This tool leverages embedding models and a vector database (FAISS or ChromaDB) to provide an efficient and scalable search engine.
+
+---
+
+## 🚀 Start Here
+
+**New to ragsearch?** Get up and running in ≤10 minutes:
+
+👉 **[Quickstart Guide](./docs/quickstart.md)** – Build a working RAG system with a public Titanic dataset. No setup required beyond `pip install`.
+
+**Then explore deeper:**
+- 📖 [Dataset Analytics Cookbook](./docs/cookbook-dataset-analytics.md) – End-to-end workflow examples with a Jupyter notebook.
+- 🔍 [API Reference & Cheat Sheet](./docs/reference-api-cheat-sheet.md) – Full contract documentation and usage patterns.
+- ❓ [Troubleshooting Guide](./docs/troubleshooting.md) – Common issues and how to solve them.
+- 📊 [Benchmark Interpretation](./docs/benchmark-interpretation.md) – Understanding evaluation results and metrics.
+
+---
 
 ## Features
 - Seamless integration with the Cohere AI LLM for generating embeddings.
 - Utilizes FAISS for fast, in-memory vector storage and similarity search.
 - Optional ChromaDB backend for persistent, scalable vector search using SQLite.
+- Unstructured ingestion support through LiteParse (with Python fallback parsers).
+- Incremental indexing support for FAISS setup runs with changed-file detection and skip-unchanged behavior.
 - Easy setup and configuration for different use cases.
 - Simple web interface for user interaction.
 
@@ -28,9 +46,23 @@ Ensure that you have all necessary dependencies installed:
 pip install pandas faiss-cpu flask cohere chromadb
 ```
 
+For richer unstructured parsing support (HTML/PDF/DOCX fallback):
+
+```bash
+pip install beautifulsoup4 pypdf python-docx
+```
+
+For LiteParse support, ensure Node.js 18+ and npx are available:
+
+```bash
+node --version
+npx --version
+npx --yes @run-llama/liteparse --help
+```
+
 ## Basic Setup
 ### Step 1: Prepare Your Data
-Ensure you have your structured data in a CSV, JSON, or Parquet format. The data should include columns for the main content and any relevant metadata.
+Ensure you have your data in a supported format. Structured files (CSV/JSON/Parquet) are loaded with pandas. Unstructured files are parsed via LiteParse when available, otherwise fallback parsers are used.
 
 **Example data (`sample_data.csv`)**:
 ```csv
@@ -80,6 +112,86 @@ rag_engine = setup(
 )
 ```
 
+### Step 2b: Unstructured File Ingestion (PDF/DOCX/TXT/HTML)
+
+Use the same `setup()` API for unstructured files:
+
+```python
+from pathlib import Path
+from ragsearch import setup
+
+data_path = Path("path/to/your/report.pdf")
+llm_api_key = "your-cohere-api-key"
+
+rag_engine = setup(data_path, llm_api_key)
+```
+
+Parser selection behavior:
+- LiteParse is preferred when available (Node.js + npx installed).
+- If LiteParse is unavailable, fallback parser is used for supported file types.
+- If LiteParse is selected but fails at runtime, `setup()` retries with fallback parser when the file type is fallback-supported.
+- Unsupported types raise `UnsupportedFileTypeError`.
+
+Ingestion diagnostics:
+- After `setup()`, the engine exposes `rag_engine.ingestion_diagnostics` with deterministic per-file fields:
+    - `source_path`: input file path used for setup.
+    - `selected_parser`: `structured/pandas`, `liteparse`, or `fallback`.
+    - `status`: `success` or `recovered_with_fallback`.
+    - `failure_reason`: empty string on success; primary parser error message when fallback recovery is used.
+    - `observability`: structured setup metrics for deterministic telemetry checks:
+        - `stage`: `ingestion`
+        - `event`: `setup_completed`
+        - `metrics.setup_latency_ms`: setup latency for current run
+        - `metrics.loaded_records`: records loaded into index for current run
+        - `metrics.selected_parser`: parser chosen by setup
+        - `metrics.fallback_recovered`: boolean fallback recovery flag
+
+Note: supported extensions can be backend-dependent. LiteParse supports additional types such as `.doc`, `.png`, `.jpg`, and `.jpeg`, while fallback parsing is intentionally narrower.
+
+Incremental indexing behavior (FAISS backend):
+- `setup()` persists an embedding manifest in the embeddings directory and reuses cached embeddings for unchanged records.
+- New or changed records are re-embedded, while unchanged records are skipped for embedding generation.
+- After setup, `rag_engine.ingestion_diagnostics["indexing"]` reports deterministic counters:
+    - `manifest_version`: manifest schema version.
+    - `manifest_path`: on-disk manifest file path.
+    - `total_records`: total records considered for indexing.
+    - `embedded_records`: records embedded in the current run.
+    - `reused_records`: records reused from manifest cache.
+    - `new_records`: records seen for the first time.
+    - `changed_records`: previously-seen records with changed content hash.
+
+Optional setup parameter:
+- `embeddings_dir`: custom directory for embedding artifacts and incremental manifest cache.
+
+Retrieval quality hooks (optional):
+- `chunking_strategy`: controls how each record is split before embedding/indexing.
+- `reranker`: post-processes retrieval results before they are returned.
+- Defaults are backward-compatible:
+    - row-level chunking (`RowChunkingStrategy`)
+    - no-op reranking (`NoOpReranker`)
+
+Example hook usage:
+
+```python
+from ragsearch import setup
+from ragsearch.chunking import FixedWordChunkingStrategy
+
+class ReverseReranker:
+    def rerank(self, query: str, results: list[dict]) -> list[dict]:
+        return list(reversed(results))
+
+rag_engine = setup(
+    data_path,
+    llm_api_key,
+    chunking_strategy=FixedWordChunkingStrategy(words_per_chunk=120),
+    reranker=ReverseReranker(),
+)
+```
+
+Notes:
+- Keep hooks disabled unless you are actively tuning retrieval quality.
+- Chunking strategy changes can alter indexed record boundaries and retrieval behavior.
+
 ### Step 3: Run a Search Query
 Once the `ragsearch` is initialized, you can perform natural language searches.
 
@@ -89,7 +201,78 @@ query = "Find recipes with chicken"
 results = rag_engine.search(query, top_k=5)
 
 for result in results:
-    print("Result:", result['metadata'])
+    print("Metadata:", result["metadata"])
+    print("Citation:", result["citation"])
+    print("Similarity:", result["similarity"])
+
+# citation fields:
+# - record_id: row/chunk index in the indexed dataset
+# - source_path: source file path when available
+# - parser_name: parser used during ingestion when available
+# - excerpt: up to 200 chars from text/combined_text
+```
+
+### Generate a Grounded Answer
+Use the retrieval-to-generation pipeline when you want a direct answer with preserved citations:
+
+```python
+response = rag_engine.answer("What does the document say about the accident location?", top_k=3)
+
+print(response["answer"])
+for citation in response["citations"]:
+    print(citation)
+```
+
+Answer response fields:
+- `question`: original query string
+- `answer`: generated response text
+- `results`: full retrieval results, including `metadata`, `citation`, and `similarity`
+- `citations`: citation list preserved from retrieval
+- `context`: grounded retrieval context supplied to the LLM
+
+HTTP API note:
+- `POST /answer` returns the same structured payload as `rag_engine.answer(...)`
+- `POST /query` remains backward-compatible and continues to return search results only
+
+Observability events:
+- `rag_engine.observability_events` stores structured events emitted during retrieval and generation.
+- Indexing event emission is backend-dependent: FAISS/in-process indexing emits `indexing_completed`; ChromaDB mode does not emit an indexing event because indexing is handled outside the in-process FAISS embedding path.
+- Retrieval events include deterministic payload fields: `query`, `top_k`, `results_count`, `latency_ms`.
+- Generation events include deterministic payload fields: `query`, `top_k`, `results_count`, `citations_count`, `latency_ms`.
+- Configure `observability_max_events` in `setup(...)` to cap retained in-memory events for long-lived processes.
+
+Evaluation harness baseline:
+- Use `ragsearch.evaluation.run_regression_gates(...)` to run deterministic pass/fail gates over a fixed case set.
+- Default thresholds are configurable via `EvaluationThresholds(min_results=..., min_citations=...)`.
+- Baseline unit gate command:
+
+```bash
+poetry run pytest libs/tests/test_evaluation.py -q
+```
+
+Evaluation quickstart:
+
+```python
+from pathlib import Path
+from ragsearch.evaluation import EvaluationThresholds, load_cases, run_regression_gates
+
+cases = load_cases(Path("libs/tests/eval_cases.json"))
+summary = run_regression_gates(
+        rag_engine,
+        cases,
+        EvaluationThresholds(min_results=1, min_citations=1),
+)
+
+print(summary["pass"], summary["passed_cases"], summary["failed_cases"])
+```
+
+Evaluation CLI:
+
+```bash
+python -m ragsearch.evaluation \
+    --engine-factory your_project.bootstrap.build_engine \
+    --cases libs/tests/eval_cases.json \
+    --summary-only
 ```
 
 ## Running the Web Interface
@@ -111,6 +294,10 @@ http://localhost:8080/
 - Click the **Submit** button.
 - View the results displayed on the page.
 
+API contract note for `/query`:
+- Default behavior is backward compatible and returns metadata-only results.
+- Set `include_details=true` in request JSON to return full objects with `metadata`, `citation`, and `similarity`.
+
 ## Testing the Package
 ### Running Unit Tests
 Ensure your package functions as expected by running `pytest`:
@@ -125,7 +312,76 @@ poetry run pytest
 To use ChromaDB, set `use_chromadb=True` and provide the path to your ChromaDB SQLite file and collection name. This enables persistent, scalable vector search.
 
 ### Changing the Embedding Model
-Modify the `llm_model_name` parameter in `setup()` to use different models, e.g., "large" or "small".
+`setup()` now uses an embedding-model contract internally.
+
+Provider selection (config-driven via `setup()` params):
+- `embedding_provider="cohere"` (default)
+- `embedding_provider="sentence_transformers"`
+- `embedding_provider="openai"`
+- `embedding_provider="ollama"`
+
+Optional provider settings:
+- `embedding_model_name`: provider-specific model id
+- `embedding_api_key`: embedding provider key (defaults to `llm_api_key`)
+- `embedding_base_url`: custom endpoint URL (OpenAI-compatible/Ollama host)
+
+Example:
+```python
+rag_engine = setup(
+    data_path,
+    llm_api_key,
+    embedding_provider="openai",
+    embedding_model_name="text-embedding-3-small",
+    embedding_api_key="your-openai-key",
+)
+```
+
+Expected embed response contract:
+- The embedding provider must support `embed(texts=[...])`.
+- The response must contain an `embeddings` attribute.
+- `embeddings` must be a non-empty sequence of numeric vectors.
+
+Dimension behavior:
+- `setup()` probes the embedding model to infer vector dimension automatically.
+- If probe-time inference fails (invalid response shape or transient provider error), `setup()` falls back to legacy dimension `4096` for backward compatibility.
+
+Migration note for custom providers:
+- If you use a custom embedding client, ensure response shape follows the contract above to avoid `ValueError` during indexing/search normalization.
+
+Optional dependencies for non-default providers:
+- `sentence-transformers` for `sentence_transformers`
+- `openai` for `openai`
+- `ollama` for `ollama`
+
+### Changing the LLM Provider
+`setup()` now uses a configurable LLM contract internally.
+
+Provider selection:
+- `llm_provider="cohere"` (default)
+- `llm_provider="openai"`
+- `llm_provider="ollama"`
+
+Optional provider settings:
+- `llm_model_name`: provider-specific chat model id
+- `llm_base_url`: custom endpoint URL (OpenAI-compatible/Ollama host)
+
+Example:
+```python
+rag_engine = setup(
+    data_path,
+    llm_api_key,
+    llm_provider="openai",
+    llm_model_name="gpt-4o-mini",
+    llm_base_url="https://api.openai.com/v1",
+)
+```
+
+Optional dependencies for non-default providers:
+- `openai` for `openai`
+- `ollama` for `ollama`
+
+Migration note:
+- Custom generation clients should return string output through the `generate(prompt, **kwargs)` contract to avoid runtime adaptation errors.
 
 ### Adding More Metadata
 Include additional columns in your data for more detailed results.
@@ -134,8 +390,26 @@ Include additional columns in your data for more detailed results.
 Edit `index.html` in the `templates` directory to adjust the UI layout or add more user features.
 
 ## Troubleshooting
-- **`AssertionError: d == self.d`**: Ensure the embedding dimension (`embedding_dim`) matches the output dimension from your embedding model.
+- **`AssertionError: d == self.d`**: Embedding/vector dimensions are typically inferred automatically. If this appears with custom providers, verify your embed response contains consistent numeric vectors in `response.embeddings`.
 - **`TypeError: embed() takes 1 positional argument`**: Use the correct keyword argument format for `embed()` based on your `cohere` version.
+- **`ValueError: Embedding response must contain an 'embeddings' attribute`**: Your embedding provider response shape does not match the A1 contract; return an object with an `embeddings` sequence.
+
+### Parser Pipeline Troubleshooting (Issue #18 Slice 3)
+
+| Error | Typical Cause | Resolution |
+| --- | --- | --- |
+| `ParserUnavailableError: LiteParse CLI not found` | Node.js/npx not installed, or custom CLI path invalid | Install Node.js 18+, verify `npx` works, or set `RAGSEARCH_LITEPARSE_CLI` to a valid executable |
+| `ParseTimeoutError` | Large/complex document exceeded parse timeout | In default `setup()` flow, timeout may be recovered automatically via fallback parser for supported types; otherwise retry with smaller file and inspect parser logs |
+| `ParseCorruptError` | Corrupt file or invalid parser output payload | In default `setup()` flow, corruption may be recovered automatically via fallback parser for supported types; if both parsers fail, the primary LiteParse error is surfaced |
+| `UnsupportedFileTypeError` | Extension not supported by the active parser backend | Convert to a supported format; fallback supports `.txt/.md/.html/.htm/.pdf/.docx`, LiteParse supports additional formats |
+| `NoDataFoundError` | File parsed but content was empty/whitespace only | Verify source file contains readable text content |
+
+### Performance Notes
+
+- Structured files (CSV/JSON/Parquet) are typically fastest because they bypass parser dispatch.
+- Unstructured parsing performance depends on document size and parser backend.
+- Very large PDFs/DOCX files can trigger timeout paths; use smaller batches/files where possible.
+- Empty/whitespace-only parsed documents are filtered before indexing to preserve retrieval quality.
 
 ## Deployment Tips
 - **Deploying to a Server**: Use services like Heroku, AWS, or Docker.
