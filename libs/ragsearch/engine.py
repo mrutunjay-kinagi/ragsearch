@@ -25,9 +25,6 @@ from flask import Flask, request, jsonify, render_template
 import threading
 from pathlib import Path
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
 class RagSearchEngine:
     @staticmethod
     def _normalize_optional_text(value) -> str:
@@ -143,6 +140,7 @@ class RagSearchEngine:
         batches = [self.index_data.iloc[i:i + self.batch_size] for i in range(0, len(self.index_data), self.batch_size)]
         logging.info(f"Data split into {len(batches)} batches (batch size: {self.batch_size})")
 
+        batch_errors = []
         for batch_idx, batch in enumerate(batches):
             try:
                 logging.info(f"Processing batch {batch_idx + 1} with {len(batch)} records...")
@@ -197,6 +195,14 @@ class RagSearchEngine:
                 logging.info(f"Batch {batch_idx + 1} successfully stored in the vector database.")
             except Exception as e:
                 logging.error(f"Failed to process batch {batch_idx + 1}: {e}")
+                batch_errors.append((batch_idx + 1, e))
+
+        if batch_errors:
+            failed = ", ".join(f"batch {i}" for i, _ in batch_errors)
+            raise RuntimeError(
+                f"Embedding indexing failed for {len(batch_errors)} batch(es): {failed}. "
+                f"First error: {batch_errors[0][1]}"
+            ) from batch_errors[0][1]
 
         self._save_embedding_manifest(manifest_path, manifest)
         self.indexing_diagnostics = {
