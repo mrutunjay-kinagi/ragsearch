@@ -6,9 +6,6 @@ import logging
 from .embedding_models import extract_embeddings
 
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
 def extract_textual_columns(data: pd.DataFrame) -> list:
     """
     Extract columns containing textual data from a DataFrame.

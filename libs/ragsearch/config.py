@@ -4,9 +4,6 @@ config.py - Load and parse configuration data from a JSON
 import json
 import logging
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
 def load_configuration(file_path: str) -> dict:
     """
     Load and parse configuration data from a JSON or YAML file.

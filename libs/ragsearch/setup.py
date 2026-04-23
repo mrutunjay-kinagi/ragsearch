@@ -24,7 +24,6 @@ from pathlib import Path
 from time import perf_counter
 from typing import Optional
 import pandas as pd
-from cohere import Client as CohereClient
 from .errors import NoDataFoundError, ParsingError, RagSearchError
 from .embedding_models import create_embedding_model, infer_embedding_dimension
 from .llm_clients import create_llm_client
@@ -203,7 +202,7 @@ def setup(data_path: Path,
         RagSearchError: If unstructured parser fails (UnsupportedFileTypeError, ParsingError, etc.).
         RuntimeError: For other data loading, Cohere client, or vector database errors.
     """
-    print("Starting setup of the RAG Search Engine...")
+    logger.info("Starting setup of the RAG Search Engine...")
     setup_started = perf_counter()
 
     # Validate data_path type
@@ -256,9 +255,12 @@ def setup(data_path: Path,
     cohere_client = None
     if llm_provider_name == "cohere" or embedding_provider_name == "cohere":
         try:
+            from cohere import Client as CohereClient
             cohere_client = CohereClient(api_key=llm_api_key)
+        except ImportError as e:
+            raise RuntimeError("Cohere SDK is not installed. Install package 'cohere'.") from e
         except Exception as e:
-            raise RuntimeError(f"Failed to initialize Cohere client: {e}")
+            raise RuntimeError(f"Failed to initialize Cohere client: {e}") from e
 
     try:
         llm_client = create_llm_client(
@@ -322,7 +324,7 @@ def setup(data_path: Path,
             file_name=file_name
         )
 
-    print("Setup complete.")
+    logger.info("Setup complete.")
     setup_latency_ms = round((perf_counter() - setup_started) * 1000.0, 3)
     ingestion_diagnostics["observability"] = {
         "stage": "ingestion",
