@@ -24,6 +24,10 @@ from pathlib import Path
 from time import perf_counter
 from typing import Optional
 import pandas as pd
+try:
+    from cohere import Client as CohereClient
+except ImportError:
+    CohereClient = None  # type: ignore[assignment,misc]
 from .errors import NoDataFoundError, ParsingError, RagSearchError
 from .embedding_models import create_embedding_model, infer_embedding_dimension
 from .llm_clients import create_llm_client
@@ -254,11 +258,10 @@ def setup(data_path: Path,
 
     cohere_client = None
     if llm_provider_name == "cohere" or embedding_provider_name == "cohere":
+        if CohereClient is None:
+            raise RuntimeError("Cohere SDK is not installed. Install package 'cohere'.")
         try:
-            from cohere import Client as CohereClient
             cohere_client = CohereClient(api_key=llm_api_key)
-        except ImportError as e:
-            raise RuntimeError("Cohere SDK is not installed. Install package 'cohere'.") from e
         except Exception as e:
             raise RuntimeError(f"Failed to initialize Cohere client: {e}") from e
 

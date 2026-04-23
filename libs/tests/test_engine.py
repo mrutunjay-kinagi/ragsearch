@@ -190,8 +190,17 @@ def test_serialize_query_results_keeps_backward_compatibility():
 
 
 def test_search_raises_value_error_for_invalid_embedding_response():
-    class BadEmbeddingModel:
+    # Succeeds during indexing (init), returns bad response only for search queries.
+    class BadOnSearchEmbeddingModel:
+        def __init__(self):
+            self._call_count = 0
+
         def embed(self, texts):
+            self._call_count += 1
+            if self._call_count == 1:
+                # First call is the index-time probe/embed — return valid vectors.
+                return DummyEmbeddingResponse([[1.0, 0.0, 0.0, 0.0]] * len(texts))
+            # Subsequent calls (search) return a bad response.
             return object()
 
     data = pd.DataFrame(
@@ -205,7 +214,7 @@ def test_search_raises_value_error_for_invalid_embedding_response():
     )
     engine = RagSearchEngine(
         data=data,
-        embedding_model=BadEmbeddingModel(),
+        embedding_model=BadOnSearchEmbeddingModel(),
         llm_client=DummyLLMClient(),
         vector_db=VectorDB(embedding_dim=4),
         save_dir="embeddings/test_engine",
