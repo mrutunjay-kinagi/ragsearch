@@ -70,7 +70,11 @@ def chroma_engine(tmp_path, monkeypatch):
     return engine, client
 
 
-@pytest.mark.xfail(strict=True, reason="#76: ChromaDB mode passes vector_db=None, so search() fails")
+@pytest.mark.xfail(
+    strict=True,
+    raises=AttributeError,
+    reason="#76: ChromaDB mode passes vector_db=None, so search() fails",
+)
 def test_chromadb_mode_answer_end_to_end(chroma_engine):
     engine, client = chroma_engine
 
@@ -82,7 +86,7 @@ def test_chromadb_mode_answer_end_to_end(chroma_engine):
     assert "Roast chicken" in client.prompts[0]
 
 
-@pytest.mark.xfail(strict=True, reason="#76: ChromaDB mode does not index with the configured embedding model")
+@pytest.mark.xfail(strict=True, reason="#76: ChromaDB mode skips indexing entirely (no embeddings generated)")
 def test_chromadb_mode_indexes_with_configured_embedding_model(chroma_engine):
     _, client = chroma_engine
 
