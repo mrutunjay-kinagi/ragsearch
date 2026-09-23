@@ -112,6 +112,8 @@ rag_engine = setup(
 )
 ```
 
+> **Known issue ([#76](https://github.com/mrutunjay-kinagi/ragsearch/issues/76)):** `search()` and `answer()` currently fail in ChromaDB mode. See [Using ChromaDB Backend](#using-chromadb-backend) for the workaround.
+
 ### Step 2b: Unstructured File Ingestion (PDF/DOCX/TXT/HTML)
 
 Use the same `setup()` API for unstructured files:
@@ -238,7 +240,7 @@ HTTP API note:
 
 Observability events:
 - `rag_engine.observability_events` stores structured events emitted during retrieval and generation.
-- Indexing event emission is backend-dependent: FAISS/in-process indexing emits `indexing_completed`; ChromaDB mode does not emit an indexing event because indexing is handled outside the in-process FAISS embedding path.
+- Indexing event emission is backend-dependent: FAISS/in-process indexing emits `indexing_completed`; ChromaDB mode emits no indexing event because it currently does not index `data_path` at all ([#76](https://github.com/mrutunjay-kinagi/ragsearch/issues/76)).
 - Retrieval events include deterministic payload fields: `query`, `top_k`, `results_count`, `latency_ms`.
 - Generation events include deterministic payload fields: `query`, `top_k`, `results_count`, `citations_count`, `latency_ms`.
 - Configure `observability_max_events` in `setup(...)` to cap retained in-memory events for long-lived processes.
@@ -311,9 +313,9 @@ poetry run pytest
 ## Advanced Usage and Customization
 
 ### Using ChromaDB Backend
-To use ChromaDB, set `use_chromadb=True` and provide the path to your ChromaDB SQLite file and collection name. This enables persistent, scalable vector search.
+To use ChromaDB, set `use_chromadb=True` and provide the ChromaDB persistence directory (`chromadb_sqlite_path`, passed to `chromadb.PersistentClient(path=...)`) and collection name. This enables persistent, scalable vector search.
 
-> **Known issue ([#76](https://github.com/mrutunjay-kinagi/ragsearch/issues/76)):** in ChromaDB mode, `search()` and `answer()` currently fail (`'NoneType' object has no attribute 'search'`), and documents are not indexed with the configured embedding model. Until this is fixed, use the default FAISS backend, or query an existing collection directly with `rag_engine.chromadb_search(query, top_k)`, which uses Chroma's own embedding function.
+> **Known issue ([#76](https://github.com/mrutunjay-kinagi/ragsearch/issues/76)):** in ChromaDB mode, `search()` and `answer()` currently fail (`'NoneType' object has no attribute 'search'`), and `data_path` is not indexed at all. Until this is fixed, use the default FAISS backend, or query an existing collection directly with `rag_engine.chromadb_search(query, top_k)`. That uses the collection's own embedding function (Chroma's default is all-MiniLM-L6-v2, downloaded on first use) and returns Chroma's raw result dict, not ragsearch results with citations.
 
 ### Changing the Embedding Model
 `setup()` now uses an embedding-model contract internally.
@@ -325,7 +327,7 @@ Provider selection (config-driven via `setup()` params):
 - `embedding_provider="ollama"`
 
 Optional provider settings:
-- `embedding_model_name`: provider-specific model id
+- `embedding_model_name`: provider-specific model id (currently ignored for Cohere, [#82](https://github.com/mrutunjay-kinagi/ragsearch/issues/82))
 - `embedding_api_key`: embedding provider key (defaults to `llm_api_key`)
 - `embedding_base_url`: custom endpoint URL (OpenAI-compatible/Ollama host)
 
@@ -366,7 +368,7 @@ Provider selection:
 - `llm_provider="ollama"`
 
 Optional provider settings:
-- `llm_model_name`: provider-specific chat model id
+- `llm_model_name`: provider-specific chat model id (currently ignored for Cohere, [#82](https://github.com/mrutunjay-kinagi/ragsearch/issues/82))
 - `llm_base_url`: custom endpoint URL (OpenAI-compatible/Ollama host)
 
 Example:
@@ -397,8 +399,8 @@ Edit `index.html` in the `templates` directory to adjust the UI layout or add mo
 - **`AssertionError: d == self.d`**: Embedding/vector dimensions are typically inferred automatically. If this appears with custom providers, verify your embed response contains consistent numeric vectors in `response.embeddings`.
 - **`TypeError: embed() takes 1 positional argument`**: Use the correct keyword argument format for `embed()` based on your `cohere` version.
 - **`ValueError: Embedding response must contain an 'embeddings' attribute`**: Your embedding provider response shape does not match the A1 contract; return an object with an `embeddings` sequence.
-- **`NotFoundError: model 'large' not found`** (or `model 'command-r' was removed`) with the default Cohere provider: the Cohere adapters do not send a model name, and Cohere has retired the defaults it falls back to. `embedding_model_name`/`llm_model_name` are currently ignored for Cohere. Until [#82](https://github.com/mrutunjay-kinagi/ragsearch/issues/82) is fixed, use another provider (`openai`, `ollama`, or `sentence_transformers` for embeddings).
-- **DOCX content missing / scanned PDF gives `NoDataFoundError`**: the fallback DOCX parser reads paragraphs only, not tables, and there is no OCR for PDFs without a text layer ([#83](https://github.com/mrutunjay-kinagi/ragsearch/issues/83)). Convert table-heavy DOCX files to PDF/text, and OCR scans before ingesting.
+- **`NotFoundError: model 'large' not found`** (or `model 'command-r' was removed on September 15, 2025`) with the default Cohere provider: the Cohere adapters do not send a model name, and Cohere has retired the defaults it falls back to. `embedding_model_name`/`llm_model_name` are currently ignored for Cohere. Until [#82](https://github.com/mrutunjay-kinagi/ragsearch/issues/82) is fixed, use another provider (`openai`, `ollama`, or `sentence_transformers` for embeddings).
+- **DOCX content missing / scanned PDF gives `NoDataFoundError`**: with the built-in fallback parser (used when Node.js/LiteParse is not available), DOCX files are read paragraphs-only, so tables are skipped, and PDFs without a text layer yield no text because there is no OCR ([#83](https://github.com/mrutunjay-kinagi/ragsearch/issues/83)). Convert table-heavy DOCX files to PDF/text, and OCR scans before ingesting.
 
 ### Parser Pipeline Troubleshooting (Issue #18 Slice 3)
 

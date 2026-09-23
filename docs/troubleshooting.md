@@ -113,7 +113,14 @@ pip install ollama           # For Ollama
 
 The Cohere adapters do not send a model name, and Cohere has retired the defaults it falls back to (`large` for embeddings, `command-r` for chat). `embedding_model_name` and `llm_model_name` are currently ignored for Cohere, so they cannot be used as a workaround. Until [#82](https://github.com/mrutunjay-kinagi/ragsearch/issues/82) is fixed, use another provider:
 
+```bash
+pip install openai
+```
+
 ```python
+from pathlib import Path
+from ragsearch import setup
+
 engine = setup(
     Path("data.csv"),
     llm_api_key="sk-...",
@@ -188,7 +195,7 @@ for result in summary['results']:
 5. **Default Cohere models retired:** see the Setup Failures entry above ([#82](https://github.com/mrutunjay-kinagi/ragsearch/issues/82))
 6. **One chunk per document by default:** unstructured files are indexed as a single chunk unless you pass a `chunking_strategy` ([#77](https://github.com/mrutunjay-kinagi/ragsearch/issues/77))
 7. **Numeric columns** in CSV/JSON/Parquet are not included in the indexed text ([#78](https://github.com/mrutunjay-kinagi/ragsearch/issues/78))
-8. **Parsing gaps:** DOCX tables are skipped and scanned PDFs (no text layer) yield no text, since there is no OCR ([#83](https://github.com/mrutunjay-kinagi/ragsearch/issues/83))
+8. **Parsing gaps (built-in fallback parser, used when Node.js/LiteParse is not available):** DOCX tables are skipped and scanned PDFs (no text layer) yield no text, since there is no OCR ([#83](https://github.com/mrutunjay-kinagi/ragsearch/issues/83))
 9. **No prompt token budget:** `answer()` sends the full text of every retrieved chunk; very large chunks or a high `top_k` can exceed the model's context window ([#88](https://github.com/mrutunjay-kinagi/ragsearch/issues/88))
 
 ---

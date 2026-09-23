@@ -40,8 +40,9 @@ Trade-offs:
 ## Amendment (2026-09-24, #75)
 
 The answer context is built from the full text of each retrieved chunk
-(`combined_text` for chunked rows, otherwise `text`). `citation["excerpt"]`
-remains a 200-character display snippet and is no longer used for generation.
+(`combined_text` for chunked rows; otherwise `text`, falling back to
+`combined_text` when there is no `text` column). `citation["excerpt"]` remains
+a 200-character display snippet and is only a last-resort fallback.
 
 ## Testing Notes
 
