@@ -209,7 +209,7 @@ for result in results:
 # - record_id: row/chunk index in the indexed dataset
 # - source_path: source file path when available
 # - parser_name: parser used during ingestion when available
-# - excerpt: up to 200 chars from text/combined_text
+# - excerpt: up to 200 chars of the matched chunk (for display; answer() sends the full chunk to the LLM)
 ```
 
 ### Generate a Grounded Answer
@@ -228,7 +228,9 @@ Answer response fields:
 - `answer`: generated response text
 - `results`: full retrieval results, including `metadata`, `citation`, and `similarity`
 - `citations`: citation list preserved from retrieval
-- `context`: grounded retrieval context supplied to the LLM
+- `context`: the numbered sources supplied to the LLM, each containing the full text of the retrieved chunk (not the 200-char `excerpt`)
+
+Prompt size grows with chunk size and `top_k`; there is no token budget yet. With the default row-level chunking an unstructured document is a single chunk, so pass a `chunking_strategy` (for example `FixedWordChunkingStrategy`) for long documents.
 
 HTTP API note:
 - `POST /answer` returns the same structured payload as `rag_engine.answer(...)`
@@ -310,6 +312,8 @@ poetry run pytest
 
 ### Using ChromaDB Backend
 To use ChromaDB, set `use_chromadb=True` and provide the path to your ChromaDB SQLite file and collection name. This enables persistent, scalable vector search.
+
+> **Known issue ([#76](https://github.com/mrutunjay-kinagi/ragsearch/issues/76)):** in ChromaDB mode, `search()` and `answer()` currently fail (`'NoneType' object has no attribute 'search'`), and documents are not indexed with the configured embedding model. Until this is fixed, use the default FAISS backend, or query an existing collection directly with `rag_engine.chromadb_search(query, top_k)`, which uses Chroma's own embedding function.
 
 ### Changing the Embedding Model
 `setup()` now uses an embedding-model contract internally.
@@ -393,6 +397,8 @@ Edit `index.html` in the `templates` directory to adjust the UI layout or add mo
 - **`AssertionError: d == self.d`**: Embedding/vector dimensions are typically inferred automatically. If this appears with custom providers, verify your embed response contains consistent numeric vectors in `response.embeddings`.
 - **`TypeError: embed() takes 1 positional argument`**: Use the correct keyword argument format for `embed()` based on your `cohere` version.
 - **`ValueError: Embedding response must contain an 'embeddings' attribute`**: Your embedding provider response shape does not match the A1 contract; return an object with an `embeddings` sequence.
+- **`NotFoundError: model 'large' not found`** (or `model 'command-r' was removed`) with the default Cohere provider: the Cohere adapters do not send a model name, and Cohere has retired the defaults it falls back to. `embedding_model_name`/`llm_model_name` are currently ignored for Cohere. Until [#82](https://github.com/mrutunjay-kinagi/ragsearch/issues/82) is fixed, use another provider (`openai`, `ollama`, or `sentence_transformers` for embeddings).
+- **DOCX content missing / scanned PDF gives `NoDataFoundError`**: the fallback DOCX parser reads paragraphs only, not tables, and there is no OCR for PDFs without a text layer ([#83](https://github.com/mrutunjay-kinagi/ragsearch/issues/83)). Convert table-heavy DOCX files to PDF/text, and OCR scans before ingesting.
 
 ### Parser Pipeline Troubleshooting (Issue #18 Slice 3)
 

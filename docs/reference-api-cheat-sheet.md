@@ -112,7 +112,7 @@ Retrieve top-k most similar records to a query.
       "record_id": 0,                    # Retrieved row/index identifier
       "source_path": "...",             # Optional source identifier
       "parser_name": "...",             # Optional parser identifier
-      "excerpt": "Name: Smith | Age: 25 | ..."  # First 200 chars of text
+      "excerpt": "Name: Smith | Age: 25 | ..."  # First 200 chars of the matched chunk (display only)
     },
     "similarity": 0.95                 # Similarity score; higher means more similar
   },
@@ -150,9 +150,11 @@ Generate a grounded answer to a question using retrieved sources.
   "citations": [
     # ... citation objects only (see citation structure above)
   ],
-  "context": "[1] source_path: public:titanic.csv...\\n\\n[2]..."  # Formatted for LLM
+  "context": "[1] source_path: public:titanic.csv...\\n\\n[2]..."  # Numbered sources sent to the LLM
 }
 ```
+
+`context` contains the **full text** of each retrieved chunk, not the 200-char `excerpt`. When a `chunking_strategy` is used, that is the matched chunk rather than the whole source document. Prompt size grows with chunk size and `top_k`; there is no token budget yet.
 
 **Example:**
 ```python

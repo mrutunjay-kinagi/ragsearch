@@ -109,6 +109,19 @@ pip install sentence-transformers  # For local embeddings
 pip install ollama           # For Ollama
 ```
 
+### `NotFoundError: model 'large' not found` with the default Cohere provider
+
+The Cohere adapters do not send a model name, and Cohere has retired the defaults it falls back to (`large` for embeddings, `command-r` for chat). `embedding_model_name` and `llm_model_name` are currently ignored for Cohere, so they cannot be used as a workaround. Until [#82](https://github.com/mrutunjay-kinagi/ragsearch/issues/82) is fixed, use another provider:
+
+```python
+engine = setup(
+    Path("data.csv"),
+    llm_api_key="sk-...",
+    embedding_provider="openai",
+    llm_provider="openai",
+)
+```
+
 ### "No data found in the provided DataFrame"
 
 **Solution:**
@@ -171,6 +184,12 @@ for result in summary['results']:
 1. **Keyword embeddings** (demo model) are brittle; use real embeddings in production
 2. **Source accuracy** depends on embedding model; always verify manually
 3. **Benchmark artifacts** in `.benchmarks/` are produced by the benchmark runner scripts, not by search calls
+4. **ChromaDB mode:** `search()` and `answer()` currently fail when `use_chromadb=True`; use the default FAISS backend ([#76](https://github.com/mrutunjay-kinagi/ragsearch/issues/76))
+5. **Default Cohere models retired:** see the Setup Failures entry above ([#82](https://github.com/mrutunjay-kinagi/ragsearch/issues/82))
+6. **One chunk per document by default:** unstructured files are indexed as a single chunk unless you pass a `chunking_strategy` ([#77](https://github.com/mrutunjay-kinagi/ragsearch/issues/77))
+7. **Numeric columns** in CSV/JSON/Parquet are not included in the indexed text ([#78](https://github.com/mrutunjay-kinagi/ragsearch/issues/78))
+8. **Parsing gaps:** DOCX tables are skipped and scanned PDFs (no text layer) yield no text, since there is no OCR ([#83](https://github.com/mrutunjay-kinagi/ragsearch/issues/83))
+9. **No prompt token budget:** `answer()` sends the full text of every retrieved chunk; very large chunks or a high `top_k` can exceed the model's context window
 
 ---
 

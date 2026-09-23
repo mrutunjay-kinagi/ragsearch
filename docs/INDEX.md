@@ -35,10 +35,11 @@ Complete guide to retrieval-augmented generation with ragsearch.
 - **Incremental indexing manifest** → [ADR-0006](./adr/ADR-0006-incremental-indexing-manifest.md)
 - **Retrieval quality hooks** → [ADR-0007](./adr/ADR-0007-retrieval-quality-hooks.md)
 - **Observability & evaluation baseline** → [ADR-0008](./adr/ADR-0008-observability-evaluation-baseline.md)
+- **Structured-data aggregation via read-only SQL** (proposed) → [ADR-0009](./adr/ADR-0009-structured-aggregation-readonly-sql.md)
 
 ## Support
 
-- **Report issues** → [GitHub Issues](https://github.com/ragsearch/ragsearch/issues)
+- **Report issues** → [GitHub Issues](https://github.com/mrutunjay-kinagi/ragsearch/issues)
 - **Suggest improvements** → Open a discussion or PR
 - **Questions?** → See [Troubleshooting](./troubleshooting.md) first
 
@@ -62,7 +63,8 @@ docs/
 │   ├── ADR-0005-retrieval-generation-pipeline.md
 │   ├── ADR-0006-incremental-indexing-manifest.md
 │   ├── ADR-0007-retrieval-quality-hooks.md
-│   └── ADR-0008-observability-evaluation-baseline.md
+│   ├── ADR-0008-observability-evaluation-baseline.md
+│   └── ADR-0009-structured-aggregation-readonly-sql.md
 └── _build/                               # Generated Sphinx docs (HTML)
 ```
 
