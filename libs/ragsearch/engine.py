@@ -31,6 +31,9 @@ class RagSearchEngine:
         """Normalize optional metadata text fields to stable API strings."""
         if value is None:
             return ""
+        # pd.isna on list/array values is element-wise, so stringify non-scalars directly.
+        if not pd.api.types.is_scalar(value):
+            return str(value).strip()
         # Handle pandas missing markers without introducing stringified 'nan'.
         if pd.isna(value):
             return ""
@@ -349,8 +352,8 @@ class RagSearchEngine:
                 source_path = self._normalize_optional_text(metadata.get("source_path", ""))
                 parser_name = self._normalize_optional_text(metadata.get("parser_name", ""))
 
-                excerpt_source = metadata.get("text") or metadata.get("combined_text") or ""
-                excerpt = "" if excerpt_source is None else str(excerpt_source)[:200]
+                # Excerpt is a short display snippet; answer context uses the full chunk text.
+                excerpt = self._result_text(metadata)[:200]
 
                 citation = {
                     "record_id": int(index),
@@ -401,6 +404,23 @@ class RagSearchEngine:
         return [res.get("metadata", {}) for res in results]
 
     @staticmethod
+    def _result_text(metadata: Dict) -> str:
+        """Return the full indexed text for a retrieval result.
+
+        Chunked rows carry the chunk in ``combined_text`` while ``text`` still holds the
+        whole source document, so prefer the chunk whenever the row was chunked.
+        """
+        if "chunk_index" in metadata:
+            candidates = (metadata.get("combined_text"), metadata.get("text"))
+        else:
+            candidates = (metadata.get("text"), metadata.get("combined_text"))
+        for candidate in candidates:
+            text = RagSearchEngine._normalize_optional_text(candidate)
+            if text:
+                return text
+        return ""
+
+    @staticmethod
     def _build_answer_context(results: List[Dict]) -> str:
         """Build a numbered retrieval context block for answer generation."""
         if not results:
@@ -410,7 +430,7 @@ class RagSearchEngine:
         for position, result in enumerate(results, start=1):
             citation = result.get("citation", {})
             metadata = result.get("metadata", {})
-            excerpt = citation.get("excerpt") or metadata.get("text") or metadata.get("combined_text") or ""
+            excerpt = RagSearchEngine._result_text(metadata) or citation.get("excerpt") or ""
             source_path = citation.get("source_path", "")
             parser_name = citation.get("parser_name", "")
             similarity = result.get("similarity", 0.0)
