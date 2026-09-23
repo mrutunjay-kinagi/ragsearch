@@ -189,7 +189,7 @@ def test_serialize_query_results_keeps_backward_compatibility():
     assert detailed_payload == enriched
 
 
-def test_search_raises_value_error_for_invalid_embedding_response():
+def test_search_raises_value_error_for_invalid_embedding_response(tmp_path):
     # Succeeds during indexing (init), returns bad response only for search queries.
     class BadOnSearchEmbeddingModel:
         def __init__(self):
@@ -217,7 +217,7 @@ def test_search_raises_value_error_for_invalid_embedding_response():
         embedding_model=BadOnSearchEmbeddingModel(),
         llm_client=DummyLLMClient(),
         vector_db=VectorDB(embedding_dim=4),
-        save_dir="embeddings/test_engine",
+        save_dir=str(tmp_path / "embeddings"),
     )
 
     try:
