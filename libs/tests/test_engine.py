@@ -258,6 +258,55 @@ def test_answer_returns_structured_output_with_preserved_citations():
     assert "[1] source_path: /docs/alpha.txt" in engine.llm_client.prompts[0]
 
 
+def test_answer_prompt_contains_full_text_of_long_chunk(tmp_path):
+    long_text = "Alpha " + " ".join(f"clause{i}" for i in range(80)) + " final-sentinel"
+    assert len(long_text) > 200
+    data = pd.DataFrame(
+        [
+            {"text": long_text, "source_path": "/docs/alpha.txt", "parser_name": "fallback/plain_text"},
+            {"text": "Beta document content", "source_path": "/docs/beta.txt", "parser_name": "fallback/plain_text"},
+        ]
+    )
+    engine = RagSearchEngine(
+        data=data,
+        embedding_model=DummyEmbeddingModel(),
+        llm_client=DummyLLMClient(),
+        vector_db=VectorDB(embedding_dim=4),
+        save_dir=str(tmp_path / "embeddings"),
+    )
+
+    payload = engine.answer("alpha", top_k=1)
+
+    assert long_text in engine.llm_client.prompts[0]
+    assert long_text in payload["context"]
+    # The citation excerpt stays short for display.
+    assert len(payload["citations"][0]["excerpt"]) <= 200
+
+
+def test_answer_prompt_uses_chunk_text_not_whole_document(tmp_path):
+    document = "beta intro words here. alpha late-section-sentinel details"
+    data = pd.DataFrame(
+        [{"text": document, "source_path": "/docs/doc.txt", "parser_name": "fallback/plain_text"}]
+    )
+    engine = RagSearchEngine(
+        data=data,
+        embedding_model=DummyEmbeddingModel(),
+        llm_client=DummyLLMClient(),
+        vector_db=VectorDB(embedding_dim=4),
+        save_dir=str(tmp_path / "embeddings"),
+        chunking_strategy=FixedWordChunkingStrategy(words_per_chunk=4),
+    )
+
+    payload = engine.answer("alpha", top_k=1)
+    prompt = engine.llm_client.prompts[0]
+    chunk = payload["results"][0]["metadata"]["combined_text"]
+
+    assert "late-section-sentinel" in chunk
+    assert chunk in prompt
+    assert "beta intro words here." not in prompt
+    assert payload["citations"][0]["excerpt"] == chunk
+
+
 def test_build_answer_prompt_mentions_grounding_rules():
     prompt = RagSearchEngine._build_answer_prompt("What is alpha?", [])
 
