@@ -35,6 +35,8 @@ print(df.columns.tolist())
 from ragsearch import setup
 
 # Setup with Cohere embeddings (default)
+# Note: the default Cohere setup currently fails because Cohere retired its fallback
+# models; use another provider until https://github.com/mrutunjay-kinagi/ragsearch/issues/82 is fixed.
 engine = setup(
     data_path=Path("recipes.csv"),
     llm_api_key="your-cohere-api-key",

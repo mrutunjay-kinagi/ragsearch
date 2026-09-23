@@ -37,6 +37,13 @@ Trade-offs:
 - The answer prompt is intentionally conservative and may be terse.
 - Any prompt schema changes should be coordinated with tests and documentation.
 
+## Amendment (2026-09-24, #75)
+
+The answer context is built from the full text of each retrieved chunk
+(`combined_text` for chunked rows; otherwise `text`, falling back to
+`combined_text` when there is no `text` column). `citation["excerpt"]` remains
+a 200-character display snippet and is only a last-resort fallback.
+
 ## Testing Notes
 
 - Tests verify context assembly and prompt construction.

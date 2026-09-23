@@ -29,6 +29,7 @@ Welcome to ragsearch's Documentation!
    adr/ADR-0006-incremental-indexing-manifest
    adr/ADR-0007-retrieval-quality-hooks
    adr/ADR-0008-observability-evaluation-baseline
+   adr/ADR-0009-structured-aggregation-readonly-sql
 
 .. include:: ../README.rst
 

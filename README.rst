@@ -99,6 +99,11 @@ Use the ``setup()`` function to set up the ``ragsearch`` with your data and conf
        chromadb_collection_name=chromadb_collection_name
    )
 
+.. note::
+
+   Known issue (`#76 <https://github.com/mrutunjay-kinagi/ragsearch/issues/76>`_): ``search()`` and ``answer()``
+   currently fail in ChromaDB mode, and ``data_path`` is not indexed. Use the default FAISS backend until this is fixed.
+
 Step 3: Run a Search Query
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -161,11 +166,17 @@ Advanced Usage and Customization
 
 Using ChromaDB Backend
 ~~~~~~~~~~~~~~~~~~~~~~
-To use ChromaDB, set ``use_chromadb=True`` and provide the path to your ChromaDB SQLite file and collection name. This enables persistent, scalable vector search.
+To use ChromaDB, set ``use_chromadb=True`` and provide the ChromaDB persistence directory (``chromadb_sqlite_path``) and collection name. This enables persistent, scalable vector search. See the known issue above (`#76 <https://github.com/mrutunjay-kinagi/ragsearch/issues/76>`_).
 
 Changing the Embedding Model
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-Modify the ``llm_model_name`` parameter in ``setup()`` to use different models, e.g., “large” or “small”.
+Choose a provider with ``embedding_provider`` (``cohere`` default, ``sentence_transformers``, ``openai``, ``ollama``) and a model with ``embedding_model_name``; the chat model is set with ``llm_provider`` / ``llm_model_name``.
+
+.. note::
+
+   Known issue (`#82 <https://github.com/mrutunjay-kinagi/ragsearch/issues/82>`_): model names are currently ignored for
+   Cohere, and Cohere's fallback defaults (``large``, ``command-r``) are retired, so the default Cohere setup fails.
+   Use another provider until this is fixed.
 
 Adding More Metadata
 ~~~~~~~~~~~~~~~~~~~~
