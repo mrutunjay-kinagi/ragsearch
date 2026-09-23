@@ -307,6 +307,11 @@ def test_answer_prompt_uses_chunk_text_not_whole_document(tmp_path):
     assert payload["citations"][0]["excerpt"] == chunk
 
 
+def test_result_text_handles_non_scalar_metadata():
+    assert RagSearchEngine._result_text({"text": ["a", "b"]}) == "['a', 'b']"
+    assert RagSearchEngine._result_text({"text": float("nan"), "combined_text": "row text"}) == "row text"
+
+
 def test_build_answer_prompt_mentions_grounding_rules():
     prompt = RagSearchEngine._build_answer_prompt("What is alpha?", [])
 

@@ -31,6 +31,9 @@ class RagSearchEngine:
         """Normalize optional metadata text fields to stable API strings."""
         if value is None:
             return ""
+        # pd.isna on list/array values is element-wise, so stringify non-scalars directly.
+        if not pd.api.types.is_scalar(value):
+            return str(value).strip()
         # Handle pandas missing markers without introducing stringified 'nan'.
         if pd.isna(value):
             return ""
