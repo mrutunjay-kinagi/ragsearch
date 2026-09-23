@@ -230,7 +230,7 @@ Answer response fields:
 - `citations`: citation list preserved from retrieval
 - `context`: the numbered sources supplied to the LLM, each containing the full text of the retrieved chunk (not the 200-char `excerpt`)
 
-Prompt size grows with chunk size and `top_k`; there is no token budget yet. With the default row-level chunking an unstructured document is a single chunk, so pass a `chunking_strategy` (for example `FixedWordChunkingStrategy`) for long documents.
+Prompt size grows with chunk size and `top_k`; there is no token budget yet ([#88](https://github.com/mrutunjay-kinagi/ragsearch/issues/88)). With the default row-level chunking an unstructured document is a single chunk, so pass a `chunking_strategy` (for example `FixedWordChunkingStrategy`) for long documents.
 
 HTTP API note:
 - `POST /answer` returns the same structured payload as `rag_engine.answer(...)`

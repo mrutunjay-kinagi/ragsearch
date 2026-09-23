@@ -154,7 +154,7 @@ Generate a grounded answer to a question using retrieved sources.
 }
 ```
 
-`context` contains the **full text** of each retrieved chunk, not the 200-char `excerpt`. When a `chunking_strategy` is used, that is the matched chunk rather than the whole source document. Prompt size grows with chunk size and `top_k`; there is no token budget yet.
+`context` contains the **full text** of each retrieved chunk, not the 200-char `excerpt`. When a `chunking_strategy` is used, that is the matched chunk rather than the whole source document. Prompt size grows with chunk size and `top_k`; there is no token budget yet ([#88](https://github.com/mrutunjay-kinagi/ragsearch/issues/88)).
 
 **Example:**
 ```python
