@@ -52,7 +52,6 @@ For LiteParse support, make sure Node.js 18+ and `npx` are available:
 ```bash
 node --version
 npx --version
-npx --yes @run-llama/liteparse --help
 ```
 
 ## Basic usage
