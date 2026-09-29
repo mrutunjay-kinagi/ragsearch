@@ -88,6 +88,17 @@ class SentenceTransformersEmbeddingAdapter:
         return EmbeddingResponse(embeddings=extract_embeddings(EmbeddingResponse(embeddings=encoded)))
 
 
+def _response_field(payload: Any, name: str) -> Any:
+    """Read ``name`` from a dict response or a typed (attribute-based) response object.
+
+    The ollama client returns typed pydantic responses (e.g. ``ollama.EmbedResponse``), which are
+    not dicts; older clients and raw HTTP payloads are plain dicts (#129).
+    """
+    if isinstance(payload, dict):
+        return payload.get(name)
+    return getattr(payload, name, None)
+
+
 @dataclass
 class OllamaEmbeddingAdapter:
     """Adapter for Ollama embedding clients."""
@@ -98,18 +109,14 @@ class OllamaEmbeddingAdapter:
     def embed(self, texts: Sequence[str]) -> EmbeddingResponse:
         if hasattr(self.client, "embed"):
             payload = self.client.embed(model=self.model, input=list(texts))
-            raw_vectors = payload.get("embeddings") if isinstance(payload, dict) else None
+            raw_vectors = _response_field(payload, "embeddings")
             return EmbeddingResponse(embeddings=extract_embeddings(EmbeddingResponse(embeddings=raw_vectors)))
 
         if hasattr(self.client, "embeddings"):
             vectors: List[List[float]] = []
             for text in texts:
                 payload = self.client.embeddings(model=self.model, prompt=text)
-                if isinstance(payload, dict):
-                    vector = payload.get("embedding")
-                else:
-                    vector = getattr(payload, "embedding", None)
-                vectors.append(vector)
+                vectors.append(_response_field(payload, "embedding"))
             return EmbeddingResponse(embeddings=extract_embeddings(EmbeddingResponse(embeddings=vectors)))
 
         raise ValueError("Ollama client must provide either 'embed' or 'embeddings'.")
