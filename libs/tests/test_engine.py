@@ -2,6 +2,9 @@
 Unit tests for citation payload behavior in RagSearchEngine.search.
 """
 
+import json
+import logging
+
 import pandas as pd
 
 from libs.ragsearch.engine import RagSearchEngine
@@ -576,3 +579,97 @@ def test_observability_event_retention_respects_max_events():
 
     assert len(engine.observability_events) == 2
     assert engine.observability_events[-1]["stage"] == "generation"
+
+
+class NamedEmbeddingModel:
+    """Embedding model with a provider-style model name and a fixed dimension."""
+
+    def __init__(self, model, dim):
+        self.model = model
+        self.dim = dim
+        self.call_sizes = []
+
+    def embed(self, texts):
+        self.call_sizes.append(len(texts))
+        return DummyEmbeddingResponse([[float(i + 1)] * self.dim for i, _ in enumerate(texts)])
+
+
+def _cache_engine(model, dim, tmp_path, data):
+    return RagSearchEngine(
+        data=data.copy(),
+        embedding_model=model,
+        llm_client=DummyLLMClient(),
+        vector_db=VectorDB(embedding_dim=dim),
+        save_dir=str(tmp_path / "embeddings"),
+        file_name="upgrade.csv",
+    )
+
+
+_CACHE_DATA = pd.DataFrame(
+    [
+        {"text": "alpha", "source_path": "/docs/a.txt", "parser_name": "fallback/plain_text"},
+        {"text": "beta", "source_path": "/docs/b.txt", "parser_name": "fallback/plain_text"},
+    ]
+)
+
+
+def test_upgrade_from_legacy_old_model_cache_reembeds_with_warning(tmp_path, caplog):
+    # Simulate a cache written by ragsearch <= 0.1.5 with Cohere's retired 'large' model:
+    # v1 manifest, 4096-d vectors, no model or dimension metadata.
+    _cache_engine(NamedEmbeddingModel("large", 4096), 4096, tmp_path, _CACHE_DATA)
+    manifest_path = tmp_path / "embeddings" / "upgrade.csv.embedding_manifest.json"
+    legacy = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_path.write_text(json.dumps({"version": 1, "records": legacy["records"]}), encoding="utf-8")
+
+    new_model = NamedEmbeddingModel("embed-v4.0", 1536)
+    with caplog.at_level(logging.WARNING):
+        engine = _cache_engine(new_model, 1536, tmp_path, _CACHE_DATA)
+
+    assert new_model.call_sizes == [2]
+    assert engine.indexing_diagnostics["embedded_records"] == 2
+    assert engine.indexing_diagnostics["reused_records"] == 0
+    assert "no embedding model metadata" in engine.indexing_diagnostics["cache_invalidated_reason"]
+    assert any("Re-embedding" in record.getMessage() for record in caplog.records if record.levelno == logging.WARNING)
+    assert engine.search("alpha", top_k=1)
+
+    saved = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert saved["version"] == 2
+    assert saved["embedding_model"] == "NamedEmbeddingModel:embed-v4.0"
+    assert saved["embedding_dim"] == 1536
+
+
+def test_cache_reembeds_when_model_changes_with_same_dimension(tmp_path, caplog):
+    _cache_engine(NamedEmbeddingModel("embed-english-v3.0", 4), 4, tmp_path, _CACHE_DATA)
+
+    new_model = NamedEmbeddingModel("embed-multilingual-v3.0", 4)
+    with caplog.at_level(logging.WARNING):
+        engine = _cache_engine(new_model, 4, tmp_path, _CACHE_DATA)
+
+    assert new_model.call_sizes == [2]
+    assert engine.indexing_diagnostics["reused_records"] == 0
+    reason = engine.indexing_diagnostics["cache_invalidated_reason"]
+    assert "embed-english-v3.0" in reason and "embed-multilingual-v3.0" in reason
+    assert any("Re-embedding" in record.getMessage() for record in caplog.records if record.levelno == logging.WARNING)
+
+
+def test_cache_reembeds_when_dimension_changes(tmp_path):
+    _cache_engine(NamedEmbeddingModel("embed-v4.0", 8), 8, tmp_path, _CACHE_DATA)
+
+    new_model = NamedEmbeddingModel("embed-v4.0", 4)
+    engine = _cache_engine(new_model, 4, tmp_path, _CACHE_DATA)
+
+    assert new_model.call_sizes == [2]
+    assert "dimension" in engine.indexing_diagnostics["cache_invalidated_reason"]
+
+
+def test_cache_reused_when_model_and_dimension_unchanged(tmp_path, caplog):
+    _cache_engine(NamedEmbeddingModel("embed-v4.0", 4), 4, tmp_path, _CACHE_DATA)
+
+    new_model = NamedEmbeddingModel("embed-v4.0", 4)
+    with caplog.at_level(logging.WARNING):
+        engine = _cache_engine(new_model, 4, tmp_path, _CACHE_DATA)
+
+    assert new_model.call_sizes == []
+    assert engine.indexing_diagnostics["reused_records"] == 2
+    assert engine.indexing_diagnostics["cache_invalidated_reason"] == ""
+    assert not [record for record in caplog.records if "Re-embedding" in record.getMessage()]

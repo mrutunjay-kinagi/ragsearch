@@ -10,7 +10,7 @@ from time import perf_counter
 from typing import Any, Dict, List, Optional
 import pandas as pd
 from .errors import NoDataFoundError
-from .embedding_models import EmbeddingModel, extract_embeddings
+from .embedding_models import EmbeddingModel, describe_embedding_model, extract_embeddings
 from .llm_clients import LLMClient
 from .chunking import ChunkingStrategy, RowChunkingStrategy
 from .reranking import NoOpReranker, Reranker
@@ -24,6 +24,10 @@ from .vector_backends import VectorBackend
 from flask import Flask, request, jsonify, render_template
 import threading
 from pathlib import Path
+
+# v2 adds the embedding model identity and dimension the cached vectors were produced with.
+EMBEDDING_MANIFEST_VERSION = 2
+
 
 class RagSearchEngine:
     @staticmethod
@@ -83,14 +87,16 @@ class RagSearchEngine:
         self.chromadb_collection_name = chromadb_collection_name
         self.index_data = data
         self.observability_events: List[Dict[str, Any]] = []
+        self.embedding_model_id = describe_embedding_model(embedding_model)
         self.indexing_diagnostics = {
-            "manifest_version": 1,
+            "manifest_version": EMBEDDING_MANIFEST_VERSION,
             "manifest_path": "",
             "total_records": 0,
             "embedded_records": 0,
             "reused_records": 0,
             "new_records": 0,
             "changed_records": 0,
+            "cache_invalidated_reason": "",
         }
 
         if self.data.empty:
@@ -132,6 +138,19 @@ class RagSearchEngine:
         """
         manifest_path = self.save_dir / f"{self.file_name}.embedding_manifest.json"
         manifest = self._load_embedding_manifest(manifest_path)
+        expected_dim = getattr(self.vector_db, "embedding_dim", None)
+        cache_invalidated_reason = self._embedding_cache_mismatch(manifest, expected_dim)
+        if cache_invalidated_reason:
+            logging.warning(
+                "Embedding cache %s does not match the current embedding model (%s). "
+                "Re-embedding all records.",
+                manifest_path,
+                cache_invalidated_reason,
+            )
+            manifest["records"] = {}
+        manifest["version"] = EMBEDDING_MANIFEST_VERSION
+        manifest["embedding_model"] = self.embedding_model_id
+        manifest["embedding_dim"] = expected_dim
 
         total_records = len(self.index_data)
         embedded_records = 0
@@ -159,7 +178,11 @@ class RagSearchEngine:
                     content_hash = self._content_hash(str(row.get("combined_text", "")))
                     cached = manifest["records"].get(record_key)
 
-                    if cached and cached.get("content_hash") == content_hash:
+                    if (
+                        cached
+                        and cached.get("content_hash") == content_hash
+                        and (expected_dim is None or len(cached["embedding"]) == expected_dim)
+                    ):
                         reused_records += 1
                         resolved_embeddings.append(cached.get("embedding", []))
                         continue
@@ -178,6 +201,8 @@ class RagSearchEngine:
                     response = self.embedding_model.embed(texts=pending_texts)
                     new_embeddings = extract_embeddings(response)
                     embedded_records += len(new_embeddings)
+                    if manifest["embedding_dim"] is None and new_embeddings:
+                        manifest["embedding_dim"] = len(new_embeddings[0])
 
                     for offset, embedding in enumerate(new_embeddings):
                         position = pending_positions[offset]
@@ -216,6 +241,7 @@ class RagSearchEngine:
             "reused_records": int(reused_records),
             "new_records": int(new_records),
             "changed_records": int(changed_records),
+            "cache_invalidated_reason": cache_invalidated_reason,
         }
         self._emit_observability_event(
             stage="indexing",
@@ -275,6 +301,23 @@ class RagSearchEngine:
             return f"{source_path}::{parser_name}::{source_record_id}::{chunk_index}"
         return f"row::{source_record_id}::{chunk_index}"
 
+    def _embedding_cache_mismatch(self, manifest: Dict[str, Any], expected_dim: Optional[int]) -> str:
+        """Return why cached embeddings cannot be reused with the current model, or "" if they can."""
+        if not manifest["records"]:
+            return ""
+        cached_model = manifest.get("embedding_model")
+        if not cached_model:
+            return (
+                "the cache has no embedding model metadata (written by ragsearch 0.1.5 or earlier); "
+                f"current model is {self.embedding_model_id}"
+            )
+        if cached_model != self.embedding_model_id:
+            return f"embedding model changed from {cached_model} to {self.embedding_model_id}"
+        cached_dim = manifest.get("embedding_dim")
+        if expected_dim is not None and cached_dim is not None and cached_dim != expected_dim:
+            return f"embedding dimension changed from {cached_dim} to {expected_dim}"
+        return ""
+
     @staticmethod
     def _load_embedding_manifest(manifest_path: Path) -> Dict[str, Any]:
         if not manifest_path.exists():
@@ -307,7 +350,14 @@ class RagSearchEngine:
             }
 
         version = payload.get("version", 1) if isinstance(payload, dict) else 1
-        return {"version": int(version), "records": normalized_records}
+        embedding_model = payload.get("embedding_model") if isinstance(payload, dict) else None
+        embedding_dim = payload.get("embedding_dim") if isinstance(payload, dict) else None
+        return {
+            "version": int(version),
+            "embedding_model": embedding_model if isinstance(embedding_model, str) else None,
+            "embedding_dim": embedding_dim if isinstance(embedding_dim, int) else None,
+            "records": normalized_records,
+        }
 
     @staticmethod
     def _save_embedding_manifest(manifest_path: Path, manifest: Dict[str, Any]):
