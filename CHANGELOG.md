@@ -87,6 +87,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- **Release workflow hardened (maintainers).** Publishing runs only from a GitHub Release (the
+  manual trigger is removed). The release tag must equal `v` + the `pyproject.toml` version, and the
+  tagged commit must be on `master`, or on `develop`/`master` for candidates. Pre-releases with
+  candidate versions (`X.Y.Z{a,b,rc}N`) publish to TestPyPI; final versions publish to PyPI.
+  Poetry is pinned to 1.8.3, and `pypa/gh-action-pypi-publish` moves from v1.4.2 to v1.14.2
+  (pinned by commit). ([#128](https://github.com/mrutunjay-kinagi/ragsearch/pull/128), [#107](https://github.com/mrutunjay-kinagi/ragsearch/issues/107))
+
 - **`numpy` is now a declared dependency** (ragsearch already imported it): `>=2.2.6,<2.3` on
   Python 3.10 and `>=2.3.3` on Python 3.11+, so every supported Python, including 3.14, gets a numpy
   release with prebuilt wheels. ([#127](https://github.com/mrutunjay-kinagi/ragsearch/pull/127), [#106](https://github.com/mrutunjay-kinagi/ragsearch/issues/106))
