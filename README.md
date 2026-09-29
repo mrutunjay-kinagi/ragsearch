@@ -327,7 +327,7 @@ Provider selection (config-driven via `setup()` params):
 - `embedding_provider="ollama"`
 
 Optional provider settings:
-- `embedding_model_name`: provider-specific model id (currently ignored for Cohere, [#82](https://github.com/mrutunjay-kinagi/ragsearch/issues/82))
+- `embedding_model_name`: provider-specific model id (Cohere default: `embed-v4.0`)
 - `embedding_api_key`: embedding provider key (defaults to `llm_api_key`)
 - `embedding_base_url`: custom endpoint URL (OpenAI-compatible/Ollama host)
 
@@ -350,6 +350,7 @@ Expected embed response contract:
 Dimension behavior:
 - `setup()` probes the embedding model to infer vector dimension automatically.
 - If probe-time inference fails (invalid response shape or transient provider error), `setup()` falls back to legacy dimension `4096` for backward compatibility.
+- An unknown or retired model name is not a probe failure: `setup()` raises `ModelNotFoundError` naming the parameter to change.
 
 Migration note for custom providers:
 - If you use a custom embedding client, ensure response shape follows the contract above to avoid `ValueError` during indexing/search normalization.
@@ -368,7 +369,7 @@ Provider selection:
 - `llm_provider="ollama"`
 
 Optional provider settings:
-- `llm_model_name`: provider-specific chat model id (currently ignored for Cohere, [#82](https://github.com/mrutunjay-kinagi/ragsearch/issues/82))
+- `llm_model_name`: provider-specific chat model id (Cohere default: `command-a-03-2025`)
 - `llm_base_url`: custom endpoint URL (OpenAI-compatible/Ollama host)
 
 Example:
@@ -399,7 +400,7 @@ Edit `index.html` in the `templates` directory to adjust the UI layout or add mo
 - **`AssertionError: d == self.d`**: Embedding/vector dimensions are typically inferred automatically. If this appears with custom providers, verify your embed response contains consistent numeric vectors in `response.embeddings`.
 - **`TypeError: embed() takes 1 positional argument`**: Use the correct keyword argument format for `embed()` based on your `cohere` version.
 - **`ValueError: Embedding response must contain an 'embeddings' attribute`**: Your embedding provider response shape does not match the A1 contract; return an object with an `embeddings` sequence.
-- **`NotFoundError: model 'large' not found`** (or `model 'command-r' was removed on September 15, 2025`) with the default Cohere provider: the Cohere adapters do not send a model name, and Cohere has retired the defaults it falls back to. `embedding_model_name`/`llm_model_name` are currently ignored for Cohere. Until [#82](https://github.com/mrutunjay-kinagi/ragsearch/issues/82) is fixed, use another provider (`openai`, `ollama`, or `sentence_transformers` for embeddings).
+- **`ModelNotFoundError: Cohere embedding model '...' is not available`** (or `chat model`): the provider does not recognise the model name, or has retired it. Set `embedding_model_name` or `llm_model_name` (whichever the message names) to a current model from [Cohere's model list](https://docs.cohere.com/docs/models).
 - **DOCX content missing / scanned PDF gives `NoDataFoundError`**: with the built-in fallback parser (used when Node.js/LiteParse is not available), DOCX files are read paragraphs-only, so tables are skipped, and PDFs without a text layer yield no text because there is no OCR ([#83](https://github.com/mrutunjay-kinagi/ragsearch/issues/83)). Convert table-heavy DOCX files to PDF/text, and OCR scans before ingesting.
 
 ### Parser Pipeline Troubleshooting (Issue #18 Slice 3)

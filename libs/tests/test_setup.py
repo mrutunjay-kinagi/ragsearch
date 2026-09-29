@@ -2,17 +2,27 @@
 Tests for empty-data handling in ragsearch.setup.
 """
 
+import importlib
 from pathlib import Path
 
 import pandas as pd
 import pytest
 
-from libs.ragsearch.errors import NoDataFoundError, ParseCorruptError, ParseTimeoutError, RagSearchError
+from libs.ragsearch.errors import (
+    ModelNotFoundError,
+    NoDataFoundError,
+    ParseCorruptError,
+    ParseTimeoutError,
+    RagSearchError,
+)
 from libs.ragsearch.parsers import ParsedDocument
 from libs.ragsearch.parsers._fallback import FallbackParser
 from libs.ragsearch.parsers._liteparse import LiteParseAdapter
 from libs.ragsearch.engine import RagSearchEngine
 from libs.ragsearch.setup import setup
+
+# Patch the module object: ``libs.ragsearch.setup`` as an attribute path is the setup() function (#91).
+ragsearch_setup_module = importlib.import_module("libs.ragsearch.setup")
 
 
 def test_no_data_found_is_ragsearch_error():
@@ -226,7 +236,7 @@ def test_setup_uses_embedding_dimension_from_model(tmp_path, monkeypatch):
         def __init__(self, *args, **kwargs):
             pass
 
-        def embed(self, texts):
+        def embed(self, texts, **kwargs):
             class Resp:
                 embeddings = [[0.1, 0.2, 0.3]]
 
@@ -259,7 +269,7 @@ def test_setup_falls_back_to_legacy_dimension_when_probe_shape_is_invalid(tmp_pa
         def __init__(self, *args, **kwargs):
             pass
 
-        def embed(self, texts):
+        def embed(self, texts, **kwargs):
             return object()
 
     captured = {}
@@ -289,7 +299,7 @@ def test_setup_falls_back_to_legacy_dimension_when_probe_runtime_fails(tmp_path,
         def __init__(self, *args, **kwargs):
             pass
 
-        def embed(self, texts):
+        def embed(self, texts, **kwargs):
             raise RuntimeError("provider temporarily unavailable")
 
     captured = {}
@@ -320,7 +330,7 @@ def test_setup_uses_configured_embedding_provider_factory(tmp_path, monkeypatch)
             pass
 
     class DummyEmbeddingModel:
-        def embed(self, texts):
+        def embed(self, texts, **kwargs):
             class Resp:
                 embeddings = [[0.1, 0.2, 0.3]]
 
@@ -392,7 +402,7 @@ def test_setup_uses_configured_llm_provider_factory(tmp_path, monkeypatch):
             return "ok"
 
     class DummyEmbeddingModel:
-        def embed(self, texts):
+        def embed(self, texts, **kwargs):
             class Resp:
                 embeddings = [[0.1, 0.2, 0.3]]
 
@@ -445,7 +455,7 @@ def test_setup_raises_runtime_error_for_invalid_llm_provider(tmp_path, monkeypat
             raise AssertionError("CohereClient should not be initialized for invalid LLM provider config")
 
     class DummyEmbeddingModel:
-        def embed(self, texts):
+        def embed(self, texts, **kwargs):
             class Resp:
                 embeddings = [[0.1, 0.2, 0.3]]
 
@@ -466,7 +476,7 @@ def test_setup_exposes_structured_ingestion_diagnostics(tmp_path, monkeypatch):
         def __init__(self, *args, **kwargs):
             pass
 
-        def embed(self, texts):
+        def embed(self, texts, **kwargs):
             class Resp:
                 embeddings = [[0.1, 0.2, 0.3]]
 
@@ -512,7 +522,7 @@ def test_setup_unstructured_uses_fallback_when_liteparse_runtime_fails(tmp_path,
         def __init__(self, *args, **kwargs):
             pass
 
-        def embed(self, texts):
+        def embed(self, texts, **kwargs):
             class Resp:
                 embeddings = [[0.1, 0.2, 0.3]]
 
@@ -630,7 +640,7 @@ def test_setup_uses_backend_factory_for_vector_backend(tmp_path, monkeypatch):
         def __init__(self, *args, **kwargs):
             pass
 
-        def embed(self, texts):
+        def embed(self, texts, **kwargs):
             class Resp:
                 embeddings = [[0.1, 0.2, 0.3]]
 
@@ -665,7 +675,7 @@ def test_setup_wraps_llm_client_with_protocol_adapter(tmp_path, monkeypatch):
         def __init__(self, *args, **kwargs):
             pass
 
-        def embed(self, texts):
+        def embed(self, texts, **kwargs):
             class Resp:
                 embeddings = [[0.1, 0.2, 0.3]]
 
@@ -694,7 +704,7 @@ def test_setup_passes_retrieval_quality_hooks_to_engine(tmp_path, monkeypatch):
         def __init__(self, *args, **kwargs):
             pass
 
-        def embed(self, texts):
+        def embed(self, texts, **kwargs):
             class Resp:
                 embeddings = [[0.1, 0.2, 0.3]]
 
@@ -731,3 +741,63 @@ def test_setup_passes_retrieval_quality_hooks_to_engine(tmp_path, monkeypatch):
 
     assert captured["chunking_strategy"] is chunking_strategy
     assert captured["reranker"] is reranker
+
+def test_setup_passes_cohere_model_names_to_client(tmp_path, monkeypatch):
+    data_path = tmp_path / "sample.csv"
+    data_path.write_text("name,description\na,b\n", encoding="utf-8")
+    calls = {"embed": [], "chat": []}
+
+    class DummyCohereClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def embed(self, texts, **kwargs):
+            calls["embed"].append(kwargs)
+
+            class Resp:
+                embeddings = [[0.1, 0.2, 0.3] for _ in texts]
+
+            return Resp()
+
+        def chat(self, message, **kwargs):
+            calls["chat"].append(kwargs)
+
+            class Resp:
+                text = "answer"
+
+            return Resp()
+
+    monkeypatch.setattr(ragsearch_setup_module, "CohereClient", DummyCohereClient)
+
+    engine = setup(
+        Path(data_path),
+        llm_api_key="test-key",
+        embeddings_dir=str(tmp_path / "cache"),
+        embedding_model_name="embed-english-v3.0",
+        llm_model_name="command-a-plus-05-2026",
+    )
+    engine.answer("a", top_k=1)
+
+    assert calls["embed"] and all(call["model"] == "embed-english-v3.0" for call in calls["embed"])
+    assert calls["chat"] == [{"model": "command-a-plus-05-2026"}]
+
+
+def test_setup_raises_model_not_found_instead_of_falling_back(tmp_path, monkeypatch):
+    data_path = tmp_path / "sample.csv"
+    data_path.write_text("name,description\na,b\n", encoding="utf-8")
+
+    class CohereNotFoundError(Exception):
+        status_code = 404
+        body = {"message": "model 'large' not found, make sure the correct model ID was used."}
+
+    class DummyCohereClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def embed(self, texts, **kwargs):
+            raise CohereNotFoundError()
+
+    monkeypatch.setattr(ragsearch_setup_module, "CohereClient", DummyCohereClient)
+
+    with pytest.raises(ModelNotFoundError, match="embedding_model_name"):
+        setup(Path(data_path), llm_api_key="test-key", embedding_model_name="large")

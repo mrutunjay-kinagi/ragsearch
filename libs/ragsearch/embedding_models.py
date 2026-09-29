@@ -5,7 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, List, Protocol, Sequence, runtime_checkable
 
+from .errors import ModelNotFoundError, is_model_not_found_error, provider_error_message
 
+
+# Cohere model IDs: https://docs.cohere.com/docs/models
+DEFAULT_COHERE_EMBEDDING_MODEL = "embed-v4.0"
+# v3+ Cohere embed models require input_type: https://docs.cohere.com/v1/reference/embed
+DEFAULT_COHERE_EMBEDDING_INPUT_TYPE = "search_document"
 DEFAULT_SENTENCE_TRANSFORMERS_MODEL = "all-MiniLM-L6-v2"
 DEFAULT_OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
 DEFAULT_OLLAMA_EMBEDDING_MODEL = "nomic-embed-text"
@@ -31,9 +37,21 @@ class CohereEmbeddingAdapter:
     """Adapter that presents a stable embedding contract over Cohere-like clients."""
 
     client: Any
+    model: str = DEFAULT_COHERE_EMBEDDING_MODEL
+    input_type: str = DEFAULT_COHERE_EMBEDDING_INPUT_TYPE
 
     def embed(self, texts: Sequence[str]) -> Any:
-        return self.client.embed(texts=list(texts))
+        try:
+            return self.client.embed(texts=list(texts), model=self.model, input_type=self.input_type)
+        except Exception as exc:
+            if is_model_not_found_error(exc):
+                raise ModelNotFoundError(
+                    f"Cohere embedding model '{self.model}' is not available: {provider_error_message(exc)} "
+                    f"Set embedding_model_name to a current Cohere embedding model "
+                    f"(default: '{DEFAULT_COHERE_EMBEDDING_MODEL}'); see https://docs.cohere.com/docs/models.",
+                    cause=exc,
+                ) from exc
+            raise
 
 
 @dataclass
@@ -118,7 +136,7 @@ def create_embedding_model(
             except ImportError as exc:
                 raise RuntimeError("Cohere SDK is not installed. Install package 'cohere'.") from exc
             client = CohereClient(api_key=api_key)
-        return CohereEmbeddingAdapter(client)
+        return CohereEmbeddingAdapter(client, model=model or DEFAULT_COHERE_EMBEDDING_MODEL)
 
     if normalized_provider in {"sentence_transformers", "sentence-transformers"}:
         try:

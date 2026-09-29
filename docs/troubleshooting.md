@@ -109,13 +109,9 @@ pip install sentence-transformers  # For local embeddings
 pip install ollama           # For Ollama
 ```
 
-### `NotFoundError: model 'large' not found` with the default Cohere provider
+### `ModelNotFoundError: Cohere embedding model '...' is not available`
 
-The Cohere adapters do not send a model name, and Cohere has retired the defaults it falls back to (`large` for embeddings, `command-r` for chat). `embedding_model_name` and `llm_model_name` are currently ignored for Cohere, so they cannot be used as a workaround. Until [#82](https://github.com/mrutunjay-kinagi/ragsearch/issues/82) is fixed, use another provider:
-
-```bash
-pip install openai
-```
+The provider does not recognise the configured model name, or has retired it. The message names the parameter to change: `embedding_model_name` for embeddings, `llm_model_name` for chat. Pick a current model from [Cohere's model list](https://docs.cohere.com/docs/models):
 
 ```python
 from pathlib import Path
@@ -123,11 +119,15 @@ from ragsearch import setup
 
 engine = setup(
     Path("data.csv"),
-    llm_api_key="sk-...",
-    embedding_provider="openai",
-    llm_provider="openai",
+    llm_api_key="your-cohere-key",
+    embedding_model_name="embed-v4.0",
+    llm_model_name="command-a-03-2025",
 )
 ```
+
+### `RuntimeError: Embedding indexing failed` after changing the embedding model
+
+The local embedding cache (`embeddings_dir`, default `embeddings/`) is keyed by record content only, so vectors from a previous embedding model are reused even when the model, and its vector dimension, has changed. This also happens after upgrading from a ragsearch version whose Cohere default was the retired `large` model. Delete the cache directory, or pass a fresh `embeddings_dir`, after changing `embedding_provider` or `embedding_model_name`.
 
 ### "No data found in the provided DataFrame"
 
@@ -192,11 +192,10 @@ for result in summary['results']:
 2. **Source accuracy** depends on embedding model; always verify manually
 3. **Benchmark artifacts** in `.benchmarks/` are produced by the benchmark runner scripts, not by search calls
 4. **ChromaDB mode:** `search()` and `answer()` currently fail when `use_chromadb=True`; use the default FAISS backend ([#76](https://github.com/mrutunjay-kinagi/ragsearch/issues/76))
-5. **Default Cohere models retired:** see the Setup Failures entry above ([#82](https://github.com/mrutunjay-kinagi/ragsearch/issues/82))
-6. **One chunk per document by default:** unstructured files are indexed as a single chunk unless you pass a `chunking_strategy` ([#77](https://github.com/mrutunjay-kinagi/ragsearch/issues/77))
-7. **Numeric columns** in CSV/JSON/Parquet are not included in the indexed text ([#78](https://github.com/mrutunjay-kinagi/ragsearch/issues/78))
-8. **Parsing gaps (built-in fallback parser, used when Node.js/LiteParse is not available):** DOCX tables are skipped and scanned PDFs (no text layer) yield no text, since there is no OCR ([#83](https://github.com/mrutunjay-kinagi/ragsearch/issues/83))
-9. **No prompt token budget:** `answer()` sends the full text of every retrieved chunk; very large chunks or a high `top_k` can exceed the model's context window ([#88](https://github.com/mrutunjay-kinagi/ragsearch/issues/88))
+5. **One chunk per document by default:** unstructured files are indexed as a single chunk unless you pass a `chunking_strategy` ([#77](https://github.com/mrutunjay-kinagi/ragsearch/issues/77))
+6. **Numeric columns** in CSV/JSON/Parquet are not included in the indexed text ([#78](https://github.com/mrutunjay-kinagi/ragsearch/issues/78))
+7. **Parsing gaps (built-in fallback parser, used when Node.js/LiteParse is not available):** DOCX tables are skipped and scanned PDFs (no text layer) yield no text, since there is no OCR ([#83](https://github.com/mrutunjay-kinagi/ragsearch/issues/83))
+8. **No prompt token budget:** `answer()` sends the full text of every retrieved chunk; very large chunks or a high `top_k` can exceed the model's context window ([#88](https://github.com/mrutunjay-kinagi/ragsearch/issues/88))
 
 ---
 
