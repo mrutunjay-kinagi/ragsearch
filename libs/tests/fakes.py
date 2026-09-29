@@ -37,3 +37,37 @@ class CannedLLMClient:
     def generate(self, prompt, **kwargs):
         self.prompts.append(prompt)
         return self.answer
+
+
+def write_text_pdf(path, pages):
+    """Write a minimal multi-page PDF (Helvetica text, one string per page) without extra dependencies."""
+
+    def escape(text):
+        return text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+
+    objects = ["<< /Type /Catalog /Pages 2 0 R >>", None, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"]
+    page_ids = []
+    for text in pages:
+        lines = [text[i:i + 90] for i in range(0, len(text), 90)] or [""]
+        ops = "BT /F1 10 Tf 12 TL 40 800 Td " + " ".join(f"({escape(line)}) Tj T*" for line in lines) + " ET"
+        stream = ops.encode("latin-1")
+        objects.append(f"<< /Length {len(stream)} >>\nstream\n{ops}\nendstream")
+        content_id = len(objects)
+        objects.append(
+            f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 842] "
+            f"/Resources << /Font << /F1 3 0 R >> >> /Contents {content_id} 0 R >>"
+        )
+        page_ids.append(len(objects))
+    objects[1] = f"<< /Type /Pages /Kids [{' '.join(f'{i} 0 R' for i in page_ids)}] /Count {len(page_ids)} >>"
+
+    out = bytearray(b"%PDF-1.4\n")
+    offsets = []
+    for number, body in enumerate(objects, start=1):
+        offsets.append(len(out))
+        out += f"{number} 0 obj\n{body}\nendobj\n".encode("latin-1")
+    xref = len(out)
+    out += f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n".encode("latin-1")
+    out += "".join(f"{offset:010d} 00000 n \n" for offset in offsets).encode("latin-1")
+    out += f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode("latin-1")
+    path.write_bytes(bytes(out))
+    return path

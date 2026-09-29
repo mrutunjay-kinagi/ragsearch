@@ -105,10 +105,13 @@ Answer response fields:
 - `question`: original query string
 - `answer`: generated response text
 - `results`: full retrieval results, including `metadata`, `citation`, and `similarity`
-- `citations`: citation list preserved from retrieval
+- `citations`: citations of the sources the LLM actually received, in the same order as the `[n]` markers
 - `context`: the numbered sources supplied to the LLM, each containing the full text of the retrieved chunk (not the 200-char `excerpt`)
+- `context_sources`: how many of the retrieved `results` were sent to the LLM
+- `context_truncated`: `True` when sources were left out, or cut, to stay within the context budget
+- `context_tokens_estimate`: estimated tokens of `context` (about 3.5 characters per token, erring high)
 
-Prompt size grows with chunk size and `top_k`, and there is no token budget yet ([#88](https://github.com/mrutunjay-kinagi/ragsearch/issues/88)). With the default row-level chunking, an unstructured document is a single chunk, so pass a `chunking_strategy` (for example `FixedWordChunkingStrategy`) for long documents.
+**Context budget.** `answer()` adds sources in score order until the next one would exceed `max_context_tokens` estimated tokens (default 3000). If even the first source is too large, a truncated prefix of it is sent. Set it per engine with `setup(..., max_context_tokens=...)`, or per call with `answer(..., max_context_tokens=...)`. `None` on the engine disables the cap. The default suits Ollama's default 4096-token context window with room for the instructions and the answer. Raise it for large-context models such as Cohere's Command A (256K).
 
 ### Unstructured files (PDF/DOCX/HTML/Markdown/text)
 
@@ -159,7 +162,8 @@ Observability events:
 
 - `chunking_strategy`: controls how each record is split before embedding and indexing.
 - `reranker`: post-processes retrieval results before they are returned.
-- Defaults: row-level chunking (`RowChunkingStrategy`) and no reranking (`NoOpReranker`).
+- Defaults: unstructured files (PDF, DOCX, HTML, Markdown, text) are split into overlapping windows of 150 words with 30 words of overlap (`FixedWordChunkingStrategy(words_per_chunk=150, overlap_words=30)`); structured files (CSV, JSON, Parquet) keep one chunk per row (`RowChunkingStrategy`); no reranking (`NoOpReranker`).
+- Changing the chunking strategy or its settings invalidates the embedding cache: the next `setup()` logs a warning and re-embeds every record once.
 
 ```python
 from ragsearch.chunking import FixedWordChunkingStrategy
@@ -173,7 +177,7 @@ class ReverseReranker:
 tuned_engine = setup(
     data_path,
     llm_api_key,
-    chunking_strategy=FixedWordChunkingStrategy(words_per_chunk=120),
+    chunking_strategy=FixedWordChunkingStrategy(words_per_chunk=120, overlap_words=20),
     reranker=ReverseReranker(),
 )
 ```

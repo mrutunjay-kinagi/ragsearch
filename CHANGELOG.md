@@ -51,6 +51,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- **Answer context budget.** `answer()` adds retrieved sources in score order up to
+  `max_context_tokens` estimated tokens (default 3000; set it on `setup()` or per `answer()` call,
+  `None` disables it). The response gains `context_sources`, `context_truncated` and
+  `context_tokens_estimate`. `FixedWordChunkingStrategy` gains `overlap_words`. ([#118](https://github.com/mrutunjay-kinagi/ragsearch/pull/118), [#77](https://github.com/mrutunjay-kinagi/ragsearch/issues/77), [#88](https://github.com/mrutunjay-kinagi/ragsearch/issues/88))
+
 - `EmbeddingProbeError` (a `RagSearchError` and `RuntimeError`), raised when `setup()` cannot
   determine the embedding dimension. ([#101](https://github.com/mrutunjay-kinagi/ragsearch/pull/101))
 
@@ -70,6 +75,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   ([#90](https://github.com/mrutunjay-kinagi/ragsearch/pull/90))
 
 ### Changed
+
+- **Unstructured files are chunked by default.** PDF, DOCX, HTML, Markdown and text files are
+  split into 150-word windows with 30 words of overlap, instead of one chunk per file. That used to
+  send whole documents to the LLM: about 57,700 estimated tokens per question for an 80-page PDF.
+  Structured files keep one chunk per row. The chunking settings are part of the embedding-cache
+  identity (manifest schema v3), so the first `setup()` after upgrading re-embeds cached
+  unstructured files once, with a warning. Pass `chunking_strategy=RowChunkingStrategy()` to keep
+  the old behaviour. ([#118](https://github.com/mrutunjay-kinagi/ragsearch/pull/118), [#77](https://github.com/mrutunjay-kinagi/ragsearch/issues/77), [#88](https://github.com/mrutunjay-kinagi/ragsearch/issues/88))
+- **`answer()["citations"]` lists only the sources sent to the LLM.** When the context budget
+  leaves sources out, they stay in `results` but not in `citations`, so citation numbers always
+  match the `[n]` markers in the answer. ([#118](https://github.com/mrutunjay-kinagi/ragsearch/pull/118), [#77](https://github.com/mrutunjay-kinagi/ragsearch/issues/77), [#88](https://github.com/mrutunjay-kinagi/ragsearch/issues/88))
 
 - **LiteParse is no longer used automatically.** The official LiteParse CLI
   (`@llamaindex/liteparse`) has a different interface from the one ragsearch expects, so support is

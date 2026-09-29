@@ -7,7 +7,7 @@ import logging
 
 import pandas as pd
 
-from libs.ragsearch.engine import RagSearchEngine
+from libs.ragsearch.engine import EMBEDDING_MANIFEST_VERSION, RagSearchEngine
 from libs.ragsearch.chunking import FixedWordChunkingStrategy, RowChunkingStrategy
 from libs.ragsearch.reranking import NoOpReranker
 from libs.ragsearch.vector_db import VectorDB
@@ -635,7 +635,7 @@ def test_upgrade_from_legacy_old_model_cache_reembeds_with_warning(tmp_path, cap
     assert engine.search("alpha", top_k=1)
 
     saved = json.loads(manifest_path.read_text(encoding="utf-8"))
-    assert saved["version"] == 2
+    assert saved["version"] == EMBEDDING_MANIFEST_VERSION
     assert saved["embedding_model"] == "NamedEmbeddingModel:embed-v4.0"
     assert saved["embedding_dim"] == 1536
 
