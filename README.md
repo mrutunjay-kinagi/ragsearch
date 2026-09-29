@@ -26,7 +26,7 @@ Then explore:
 - Structured (CSV/JSON/Parquet) and unstructured (PDF/DOCX/HTML/Markdown/text) ingestion through one `setup()` call.
 - Citations on every search result and answer.
 - Pluggable providers: Cohere (default), OpenAI and [OpenAI-compatible servers](#openai-compatible-endpoints), Ollama, and local sentence-transformers embeddings.
-- FAISS for fast in-memory vector search (ChromaDB support is being reworked, see [#76](https://github.com/mrutunjay-kinagi/ragsearch/issues/76)).
+- FAISS for fast in-memory vector search. ChromaDB support is an optional extra and is being reworked (see [#76](https://github.com/mrutunjay-kinagi/ragsearch/issues/76)).
 - Built-in PDF, DOCX and HTML parsing (pypdf, python-docx, beautifulsoup4), included in the default install.
 - Incremental indexing: unchanged records reuse cached embeddings across runs.
 - Evaluation harness, diagnostics and observability events built in.
@@ -324,6 +324,14 @@ local_engine = setup(
 ### Using the ChromaDB backend
 
 > **Currently broken ([#76](https://github.com/mrutunjay-kinagi/ragsearch/issues/76)):** in ChromaDB mode, `search()` and `answer()` fail with `'NoneType' object has no attribute 'search'`, and `data_path` is not indexed. Use the default FAISS backend until this is fixed. The code below shows the intended API and does not work yet.
+
+ChromaDB is an **optional extra**, not part of the base install:
+
+```bash
+pip install 'ragsearch[chromadb]'
+```
+
+Without it, `setup(..., use_chromadb=True)` raises `MissingOptionalDependencyError` with that command. The extra is kept out of the base install because the current chromadb releases (up to 1.5.9) have unpatched upstream advisories, including [GHSA-f4j7-r4q5-qw2c](https://github.com/advisories/GHSA-f4j7-r4q5-qw2c) (CVE-2026-45829, pre-authentication code injection), [GHSA-36p7-vc44-83pf](https://github.com/advisories/GHSA-36p7-vc44-83pf) and [GHSA-2wm9-hf6c-p5cr](https://github.com/advisories/GHSA-2wm9-hf6c-p5cr). They affect **Chroma's server** (its FastAPI endpoints and multi-tenant auth), not the embedded `PersistentClient` that ragsearch uses. Security scanners still flag any environment that installs it.
 
 `use_chromadb=True` takes a ChromaDB persistence directory (`chromadb_sqlite_path`, passed to `chromadb.PersistentClient(path=...)`) and a collection name:
 

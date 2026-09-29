@@ -42,7 +42,7 @@ from .llm_clients import create_llm_client
 from .parsers import FallbackParser, LiteParseAdapter, get_parser
 from .chunking import ChunkingStrategy, default_unstructured_chunking_strategy
 from .reranking import Reranker
-from .vector_db import VectorDB
+from .vector_db import VectorDB, import_chromadb
 from .engine import DEFAULT_MAX_CONTEXT_TOKENS, RagSearchEngine
 
 
@@ -268,6 +268,10 @@ def setup(data_path: Path,
     # Validate data path exists
     if not data_path.exists():
         raise FileNotFoundError(f"Data path does not exist: {data_path}")
+
+    if use_chromadb:
+        # chromadb is an optional extra (#125); fail before any parsing or provider calls.
+        import_chromadb()
 
     ingestion_diagnostics = {
         "source_path": str(data_path),

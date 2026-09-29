@@ -6,9 +6,7 @@ import faiss
 import numpy as np
 import logging
 
-import chromadb
-from chromadb.config import Settings
-from .errors import NoDataFoundError
+from .errors import MissingOptionalDependencyError, NoDataFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -96,10 +94,24 @@ class VectorDB:
             raise
 
 
+def import_chromadb():
+    """Import chromadb, which is an optional extra (#125); raise a clear error if it is missing."""
+    try:
+        import chromadb
+    except ImportError as exc:
+        raise MissingOptionalDependencyError(
+            "ChromaDB mode needs the optional 'chromadb' extra, which is not installed. "
+            "Install it with: pip install 'ragsearch[chromadb]'",
+            cause=exc,
+        ) from exc
+    return chromadb
+
+
 def get_chromadb_collection(sqlite_path: str, collection_name: str):
     """
     Connects to a ChromaDB SQLite file and returns the specified collection using the new PersistentClient API.
     """
+    chromadb = import_chromadb()
     client = chromadb.PersistentClient(path=sqlite_path)
     return client.get_collection(collection_name)
 

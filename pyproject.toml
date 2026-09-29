@@ -17,7 +17,10 @@ flask = "^3.1.2"
 cohere = "^5.17.0"
 faiss-cpu = {version = "^1.12.0", python = ">=3.10,<3.15"}
 pandas = "^2.2.3"
-chromadb = "^1.0.20"
+# Optional extra (#125): pip install 'ragsearch[chromadb]'. Kept out of the base install because
+# chromadb 1.x has unpatched server-side advisories (GHSA-f4j7-r4q5-qw2c and others) that security
+# scanners flag, even though ragsearch only uses the embedded client, and ChromaDB mode is broken (#76).
+chromadb = {version = "^1.0.20", optional = true}
 fastavro = "^1.12.0"
 # Built-in document parsers (#100). Floors: pypdf 6.16.2 is the lowest release with no known
 # OSV advisories that extracts text like the latest (6.16.1 drops word spacing); python-docx
@@ -26,7 +29,12 @@ pypdf = ">=6.16.2"
 python-docx = ">=0.8.11"
 beautifulsoup4 = ">=4.9.0"
 
+[tool.poetry.extras]
+chromadb = ["chromadb"]
+
 [tool.poetry.group.dev.dependencies]
+# Installed for the ChromaDB tests (strict xfails for #76); the published package keeps it optional.
+chromadb = "^1.0.20"
 # 9.0.3 fixes GHSA-6w46-j5rx-g56g (tmpdir handling); pytest 9 needs Python >= 3.10.
 pytest = "^9.0.3"
 pylint = "^3.3.1"
