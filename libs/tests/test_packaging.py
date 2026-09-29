@@ -84,3 +84,16 @@ def test_keywords_and_classifiers_are_declared():
     assert keywords and "rag" in keywords.group(1)
     classifiers = re.search(r"^classifiers = \[(.*?)\]", PYPROJECT, re.MULTILINE | re.DOTALL)
     assert classifiers and "Development Status ::" in classifiers.group(1)
+
+
+# --- Release preparation (#109) ---------------------------------------------------------------------
+
+
+def test_changelog_has_a_section_for_the_release_being_prepared():
+    version = _poetry_value("version")
+    final = re.match(r"^(\d+\.\d+\.\d+)", version).group(1)  # 0.2.0rc1 -> 0.2.0
+    changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+
+    assert re.search(rf"^## \[{re.escape(final)}\]", changelog, re.MULTILINE), f"CHANGELOG.md has no '## [{final}]' section"
+    unreleased = changelog.split("## [Unreleased]", 1)[1].split("\n## [", 1)[0]
+    assert not re.search(r"^### ", unreleased, re.MULTILINE), "entries should move from Unreleased into the release section"

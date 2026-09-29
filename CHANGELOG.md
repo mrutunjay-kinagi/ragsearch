@@ -8,6 +8,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.2.0] - release date to be set at release (candidate 0.2.0rc1 on TestPyPI)
+
+"It works": `pip install ragsearch` in a fresh environment and the README examples run, including on
+multi-page PDFs. Highlights: working default Cohere models; `from ragsearch import setup` returns
+the function; PDF, DOCX and HTML parsing out of the box; unstructured files chunked by default with
+a context budget in `answer()`; API keys kept per provider; the web server bound to localhost;
+Python 3.10–3.14; chromadb optional; CI on every pull request.
+
 ### Fixed
 
 - **Ollama embeddings work with the current `ollama` client.** `ollama.Client.embed()` returns a
