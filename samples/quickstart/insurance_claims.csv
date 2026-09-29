@@ -1,0 +1,9 @@
+claim_id,policy_type,status,description
+CLM-1001,auto,approved,"Rear-end collision at a red light on Main Street; bumper and trunk damage, no injuries reported."
+CLM-1002,home,under review,"Burst pipe in the upstairs bathroom flooded the kitchen ceiling; plumber invoice and photos attached."
+CLM-1003,auto,denied,"Windshield cracked by road debris on the highway; policy has no glass coverage."
+CLM-1004,health,approved,"Emergency room visit for a sprained ankle after a fall at work; X-ray showed no fracture."
+CLM-1005,home,approved,"Hailstorm damaged roof shingles and two skylights; contractor estimate submitted."
+CLM-1006,auto,under review,"Side-swiped in a parking garage by an unidentified vehicle; driver-side doors dented."
+CLM-1007,travel,approved,"Checked luggage lost on a connecting flight; airline confirmed the bag was not recovered."
+CLM-1008,health,denied,"Cosmetic dental whitening procedure; excluded from the dental plan."

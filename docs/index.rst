@@ -1,6 +1,11 @@
 Welcome to ragsearch's Documentation!
 =====================================
 
+ragsearch is a Python library for Retrieval-Augmented Generation over structured and
+unstructured data, with citations on every result and a built-in evaluation harness.
+Start with the :doc:`quickstart`; the project overview lives in the
+`README on GitHub <https://github.com/mrutunjay-kinagi/ragsearch#readme>`_.
+
 .. toctree::
    :maxdepth: 2
    :caption: Getting Started:
@@ -31,7 +36,6 @@ Welcome to ragsearch's Documentation!
    adr/ADR-0008-observability-evaluation-baseline
    adr/ADR-0009-structured-aggregation-readonly-sql
 
-.. include:: ../README.rst
 
 Indices and tables
 ==================

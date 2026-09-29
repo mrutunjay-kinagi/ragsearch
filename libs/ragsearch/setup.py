@@ -173,13 +173,13 @@ def setup(data_path: Path,
     """
     Initializes the RAG search engine from structured or unstructured data.
 
-    Data loading strategy (Slice 2 integration):
+    Data loading strategy:
     - Structured (CSV, JSON, Parquet): Loaded directly via pandas, bypassing parser.
-    - Unstructured (.txt, .pdf, .docx, etc.): Dispatched to parser via get_parser() contract.
+    - Unstructured (.txt, .pdf, .docx, etc.): Parsed with LiteParse, or the fallback parsers.
 
     Args:
         data_path (Path): The path to the data file (structured or unstructured).
-        llm_api_key (str): The API key for the Cohere client.
+        llm_api_key (str): API key for the LLM provider (Cohere by default).
         use_chromadb (bool): Whether to use ChromaDB instead of FAISS (default: False).
         chromadb_sqlite_path (str): Path to ChromaDB SQLite database (required if use_chromadb=True).
         chromadb_collection_name (str): ChromaDB collection name (required if use_chromadb=True).

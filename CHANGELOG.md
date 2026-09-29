@@ -33,11 +33,29 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- **A quickstart that uses the real API.** `docs/quickstart.md` now runs the real
+  `setup()` / `answer()` path on a small insurance-claims sample. It needs only
+  `pip install ragsearch` and a Cohere key, and no longer depends on demo embedding and LLM
+  stand-ins or a repository checkout. The samples ship in `samples/quickstart/` (claims CSV, a
+  claim letter, evaluation cases and an engine factory for the evaluation CLI). The demo
+  stand-ins moved to test fixtures, and a test runs the quickstart script offline.
+  ([#99](https://github.com/mrutunjay-kinagi/ragsearch/pull/99))
+- README section on **OpenAI-compatible endpoints** (LM Studio, vLLM, gateways) via
+  `llm_provider="openai"` + `llm_base_url` and `embedding_provider="openai"` +
+  `embedding_base_url`. ([#99](https://github.com/mrutunjay-kinagi/ragsearch/pull/99))
+
 - `ModelNotFoundError` (a `RagSearchError`), raised when a provider reports an unknown or retired
   model. The message names the parameter to change (`embedding_model_name` or `llm_model_name`).
   ([#90](https://github.com/mrutunjay-kinagi/ragsearch/pull/90))
 
 ### Changed
+
+- **README rewritten so every example runs as written** (given a key). It adds a "what makes
+  ragsearch different" summary, a known-issues link, a short sample-data excerpt instead of the raw
+  recipe CSV, a clear "currently broken" label on the ChromaDB example (#76), and no internal
+  jargon. `README.rst` is removed; `README.md` is the only README and the package long
+  description. The Sphinx landing page no longer embeds the README.
+  ([#99](https://github.com/mrutunjay-kinagi/ragsearch/pull/99))
 
 - **Upgrading re-embeds existing caches once.** Caches written by 0.1.5 or earlier carry no model
   metadata, so the first `setup()` after upgrading re-embeds them (one embedding API pass per

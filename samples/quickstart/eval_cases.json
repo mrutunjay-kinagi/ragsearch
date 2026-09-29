@@ -1,0 +1,4 @@
+[
+  {"query": "Which claims involve water damage?", "top_k": 3, "min_results": 1, "min_citations": 1},
+  {"query": "Why was the windshield claim denied?", "top_k": 3, "min_results": 1, "min_citations": 1}
+]
