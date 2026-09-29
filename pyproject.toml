@@ -1,14 +1,33 @@
 [tool.poetry]
 name = "ragsearch"
 version = "0.1.5"
-description = "ragsearch is a Python library designed for building a Retrieval-Augmented Generation (RAG) application that enables natural language querying over both structured and unstructured data. This tool leverages embedding models and a vector database (FAISS or ChromaDB) to provide an efficient and scalable search engine."
-authors = ["Mrutunjay Kinagi < mrutunjay.kinagi @ gmail.com >"]
+description = "RAG over CSVs and documents, with citations, ingestion diagnostics, and a built-in evaluation harness."
+authors = ["Mrutunjay Kinagi <mrutunjay.kinagi@gmail.com>"]
 license = "MIT"
 readme = "README.md"
+homepage = "https://github.com/mrutunjay-kinagi/ragsearch"
 repository = "https://github.com/mrutunjay-kinagi/ragsearch"
+documentation = "https://github.com/mrutunjay-kinagi/ragsearch/tree/master/docs"
+keywords = ["rag", "retrieval-augmented-generation", "llm", "embeddings", "faiss", "citations", "pdf", "csv"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    # Poetry 1.8 generates 3.10-3.12 itself; CI (ci.yml) also tests 3.13 and 3.14.
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Text Processing :: Indexing",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 packages = [
     { include = "ragsearch", from = "libs" },
 ]
+
+[tool.poetry.urls]
+"Changelog" = "https://github.com/mrutunjay-kinagi/ragsearch/blob/master/CHANGELOG.md"
+"Issues" = "https://github.com/mrutunjay-kinagi/ragsearch/issues"
 
 [tool.poetry.dependencies]
 # <4.0 is required by Poetry because cohere declares requires-python "<4.0,>=3.9".

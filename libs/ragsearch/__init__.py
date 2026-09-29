@@ -1,7 +1,13 @@
 """
-ragsearch is a Python library designed for building a
-Retrieval-Augmented Generation (RAG) application
-that enables natural language querying over structured data.
+ragsearch: Retrieval-Augmented Generation over CSV/JSON/Parquet files and documents (PDF, DOCX,
+HTML, Markdown, text).
+
+``setup()`` loads and indexes a file (FAISS by default); the returned engine's ``search()`` returns
+cited results and ``answer()`` asks an LLM for an answer grounded in, and citing, the retrieved
+sources. Ingestion and indexing diagnostics and an evaluation harness (``ragsearch.evaluation``) are
+included.
+
+    from ragsearch import setup
 """
 
 import sys

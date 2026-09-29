@@ -117,6 +117,8 @@ Answer response fields:
 
 **Context budget.** `answer()` adds sources in score order until the next one would exceed `max_context_tokens` estimated tokens (default 3000). If even the first source is too large, a truncated prefix of it is sent. Set it per engine with `setup(..., max_context_tokens=...)`, or per call with `answer(..., max_context_tokens=...)`. `None` on the engine disables the cap. The default suits Ollama's default 4096-token context window with room for the instructions and the answer. Raise it for large-context models such as Cohere's Command A (256K).
 
+**Whole-document questions.** Unstructured files are split into chunks (150 words, 30 overlap), and `answer()` sends only the top `top_k` chunks. A question that needs facts from across a whole document, such as "Who are the parties in this case?", may need a higher `top_k`, e.g. `answer(question, top_k=10)`. Sending whole documents that fit the budget is planned in [#120](https://github.com/mrutunjay-kinagi/ragsearch/issues/120).
+
 ### Unstructured files (PDF/DOCX/HTML/Markdown/text)
 
 Use the same `setup()` call:
@@ -298,6 +300,18 @@ mixed_engine = setup(
 
 When the providers differ and `embedding_api_key` is missing, `setup()` raises a `ValueError` instead of sending your OpenAI key to Cohere. The one exception is an LLM provider that needs no key (`ollama`): `llm_api_key` is then still used for the embedding provider, with a `DeprecationWarning`. Pass `embedding_api_key` instead, because this fallback will be removed.
 
+**Fully local with Ollama** (requires `pip install ollama` and a running [Ollama](https://ollama.com) server with the models pulled, e.g. `ollama pull llama3.1` and `ollama pull nomic-embed-text`). `setup()` still requires an `llm_api_key` argument even though Ollama doesn't use one, so pass any placeholder. Making it optional is tracked in [#79](https://github.com/mrutunjay-kinagi/ragsearch/issues/79).
+```python
+ollama_engine = setup(
+    data_path,
+    "not-used-by-ollama",  # placeholder: llm_api_key is currently required (#79)
+    llm_provider="ollama",
+    llm_model_name="llama3.1",
+    embedding_provider="ollama",
+    embedding_model_name="nomic-embed-text",
+)
+```
+
 Custom LLM clients must implement `generate(prompt, **kwargs)` and return a string.
 
 ### OpenAI-compatible endpoints
@@ -332,6 +346,8 @@ ChromaDB is an **optional extra**, not part of the base install:
 ```bash
 pip install 'ragsearch[chromadb]'
 ```
+
+`pip install 'ragsearch[chromadb]'` works on Python 3.10–3.14. For development, `poetry install --extras chromadb` needs Python 3.11+, because the lock file's `onnxruntime` has no 3.10 build.
 
 Without it, `setup(..., use_chromadb=True)` raises `MissingOptionalDependencyError` with that command. The extra is kept out of the base install because the current chromadb releases (up to 1.5.9) have unpatched upstream advisories, including [GHSA-f4j7-r4q5-qw2c](https://github.com/advisories/GHSA-f4j7-r4q5-qw2c) (CVE-2026-45829, pre-authentication code injection), [GHSA-36p7-vc44-83pf](https://github.com/advisories/GHSA-36p7-vc44-83pf) and [GHSA-2wm9-hf6c-p5cr](https://github.com/advisories/GHSA-2wm9-hf6c-p5cr). They affect **Chroma's server** (its FastAPI endpoints and multi-tenant auth), not the embedded `PersistentClient` that ragsearch uses. Security scanners still flag any environment that installs it.
 
