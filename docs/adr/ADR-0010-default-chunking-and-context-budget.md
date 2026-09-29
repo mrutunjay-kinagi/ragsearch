@@ -1,6 +1,6 @@
 # ADR-0010: Default chunking for unstructured files and an answer context budget
 
-- Status: proposed
+- Status: accepted (2026-09-29)
 - Date: 2026-09-29
 - Related issues: #77, #88
 
@@ -46,6 +46,10 @@ The quickstart sample eval cases (`samples/quickstart/eval_cases.json`) cover th
 ## Budget default (3000)
 
 At 150-word chunks, `top_k=5` needs about 1,500 estimated tokens, and `top_k=10` about 3,000, so the budget rarely binds by default. It stops oversized custom chunks or large `top_k` values from overflowing small windows. 3000 plus the instructions, question and answer fits Ollama's default 4096-token context (https://docs.ollama.com/faq). Large-context models such as Cohere Command A (256K, https://docs.cohere.com/docs/command-a) can raise it.
+
+## Limitation of the evidence
+
+The defaults (150 words, 30 overlap, budget 3000) were tuned on **one document**, the NIST SP 800-63B PDF, a long, well-structured technical standard. They should be re-checked on a wider mix of document types (short letters, forms, contracts, scanned or table-heavy files, multi-document corpora) in the 0.3.0 retrieval benchmark before being treated as general-purpose. Whole-document questions over small documents can also lose completeness with top-k chunks. See #120.
 
 ## Consequences
 

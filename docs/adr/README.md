@@ -12,7 +12,7 @@ This folder stores Architecture Decision Records (ADRs) for ragsearch.
 - ADR-0007: retrieval quality hooks for chunking and reranking
 - ADR-0008: structured observability and evaluation harness baseline
 - ADR-0009: structured-data aggregation via read-only SQL (proposed)
-- ADR-0010: default chunking for unstructured files and an answer context budget (proposed)
+- ADR-0010: default chunking for unstructured files and an answer context budget (accepted)
 
 ## Conventions
 

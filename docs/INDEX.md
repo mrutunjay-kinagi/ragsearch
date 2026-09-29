@@ -36,7 +36,7 @@ Complete guide to retrieval-augmented generation with ragsearch.
 - **Retrieval quality hooks** → [ADR-0007](./adr/ADR-0007-retrieval-quality-hooks.md)
 - **Observability & evaluation baseline** → [ADR-0008](./adr/ADR-0008-observability-evaluation-baseline.md)
 - **Structured-data aggregation via read-only SQL** (proposed) → [ADR-0009](./adr/ADR-0009-structured-aggregation-readonly-sql.md)
-- **Default chunking and answer context budget** (proposed) → [ADR-0010](./adr/ADR-0010-default-chunking-and-context-budget.md)
+- **Default chunking and answer context budget** (accepted) → [ADR-0010](./adr/ADR-0010-default-chunking-and-context-budget.md)
 
 ## Support
 
