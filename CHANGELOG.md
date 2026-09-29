@@ -10,6 +10,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- **PDF, DOCX and HTML files work after a plain `pip install ragsearch`.** The parsers
+  `pypdf` (>= 6.16.2), `python-docx` (>= 0.8.11) and `beautifulsoup4` (>= 4.9.0) are now regular
+  dependencies. They used to be optional, and without them every PDF and DOCX failed. If one is
+  missing at runtime anyway, the error names the `pip install` command. ([#103](https://github.com/mrutunjay-kinagi/ragsearch/pull/103), [#100](https://github.com/mrutunjay-kinagi/ragsearch/issues/100))
+- **No more failed LiteParse call before every document.** ragsearch invoked
+  `npx --no-install @run-llama/liteparse`, a package that does not exist on npm, whenever
+  Node.js was installed. That cost about 1.4 s per file before falling back, and broke `.doc` and
+  image files with an npm 404. ([#103](https://github.com/mrutunjay-kinagi/ragsearch/pull/103), [#100](https://github.com/mrutunjay-kinagi/ragsearch/issues/100))
+
 - **API keys are no longer sent to the wrong provider.** `embedding_api_key` defaulted to
   `llm_api_key` even when the two providers differed, so, for example, an OpenAI key was sent to
   Cohere. Separately, Cohere embeddings always used `llm_api_key` and ignored `embedding_api_key`, so
@@ -61,6 +70,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   ([#90](https://github.com/mrutunjay-kinagi/ragsearch/pull/90))
 
 ### Changed
+
+- **LiteParse is no longer used automatically.** The official LiteParse CLI
+  (`@llamaindex/liteparse`) has a different interface from the one ragsearch expects, so support is
+  deferred to [#102](https://github.com/mrutunjay-kinagi/ragsearch/issues/102). ragsearch uses a
+  LiteParse-compatible CLI only when `RAGSEARCH_LITEPARSE_CLI` is set. `.doc`, `.png` and `.jpg`
+  files are therefore unsupported by default. The README no longer tells users to run
+  `npx --yes @run-llama/liteparse`, which would have downloaded and executed whatever gets
+  published under that unclaimed name. ([#103](https://github.com/mrutunjay-kinagi/ragsearch/pull/103), [#100](https://github.com/mrutunjay-kinagi/ragsearch/issues/100))
 
 - **`setup()` fails fast when the embedding-dimension probe fails.** It used to log a warning
   and fall back to dimension 4096, which only suited Cohere's retired `large` model and otherwise

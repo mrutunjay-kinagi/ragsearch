@@ -98,6 +98,7 @@ def test_liteparse_adapter_returns_documents_for_mocked_subprocess(monkeypatch, 
         stderr = ""
 
     monkeypatch.setattr(LiteParseAdapter, "available", classmethod(lambda cls: True))
+    monkeypatch.setenv(LiteParseAdapter.ENV_CLI_PATH, "compatible-liteparse-cli")
     monkeypatch.setattr("libs.ragsearch.parsers._liteparse.subprocess.run", lambda *args, **kwargs: FakeCompletedProcess())
 
     documents = list(LiteParseAdapter().parse(path))
@@ -123,6 +124,7 @@ def test_liteparse_adapter_raises_timeout(monkeypatch, tmp_path):
     path.write_text("ignored", encoding="utf-8")
 
     monkeypatch.setattr(LiteParseAdapter, "available", classmethod(lambda cls: True))
+    monkeypatch.setenv(LiteParseAdapter.ENV_CLI_PATH, "compatible-liteparse-cli")
 
     def raise_timeout(*args, **kwargs):
         import subprocess
@@ -151,6 +153,7 @@ def test_liteparse_adapter_timeout_configurable(monkeypatch, tmp_path):
         return FakeCompletedProcess()
 
     monkeypatch.setattr(LiteParseAdapter, "available", classmethod(lambda cls: True))
+    monkeypatch.setenv(LiteParseAdapter.ENV_CLI_PATH, "compatible-liteparse-cli")
     monkeypatch.setattr("libs.ragsearch.parsers._liteparse.subprocess.run", fake_run)
 
     documents = list(LiteParseAdapter(timeout_s=7).parse(path))
@@ -169,6 +172,7 @@ def test_liteparse_adapter_raises_for_empty_documents_list(monkeypatch, tmp_path
         stderr = ""
 
     monkeypatch.setattr(LiteParseAdapter, "available", classmethod(lambda cls: True))
+    monkeypatch.setenv(LiteParseAdapter.ENV_CLI_PATH, "compatible-liteparse-cli")
     monkeypatch.setattr("libs.ragsearch.parsers._liteparse.subprocess.run", lambda *args, **kwargs: FakeCompletedProcess())
 
     with pytest.raises(ParseCorruptError, match="did not contain documents"):
@@ -191,6 +195,7 @@ def test_liteparse_adapter_raises_for_invalid_document_shapes(monkeypatch, tmp_p
         stderr = ""
 
     monkeypatch.setattr(LiteParseAdapter, "available", classmethod(lambda cls: True))
+    monkeypatch.setenv(LiteParseAdapter.ENV_CLI_PATH, "compatible-liteparse-cli")
     monkeypatch.setattr("libs.ragsearch.parsers._liteparse.subprocess.run", lambda *args, **kwargs: FakeCompletedProcess())
 
     with pytest.raises(ParseCorruptError, match="invalid text"):
@@ -213,6 +218,7 @@ def test_liteparse_adapter_raises_for_invalid_metadata_shape(monkeypatch, tmp_pa
         stderr = ""
 
     monkeypatch.setattr(LiteParseAdapter, "available", classmethod(lambda cls: True))
+    monkeypatch.setenv(LiteParseAdapter.ENV_CLI_PATH, "compatible-liteparse-cli")
     monkeypatch.setattr("libs.ragsearch.parsers._liteparse.subprocess.run", lambda *args, **kwargs: FakeCompletedProcess())
 
     with pytest.raises(ParseCorruptError, match="invalid metadata"):
@@ -229,6 +235,7 @@ def test_liteparse_adapter_raises_for_non_zero_exit(monkeypatch, tmp_path):
         stderr = "boom"
 
     monkeypatch.setattr(LiteParseAdapter, "available", classmethod(lambda cls: True))
+    monkeypatch.setenv(LiteParseAdapter.ENV_CLI_PATH, "compatible-liteparse-cli")
     monkeypatch.setattr("libs.ragsearch.parsers._liteparse.subprocess.run", lambda *args, **kwargs: FakeCompletedProcess())
 
     with pytest.raises(ParseCorruptError, match="LiteParse failed"):
@@ -245,6 +252,7 @@ def test_liteparse_adapter_raises_for_invalid_json(monkeypatch, tmp_path):
         stderr = ""
 
     monkeypatch.setattr(LiteParseAdapter, "available", classmethod(lambda cls: True))
+    monkeypatch.setenv(LiteParseAdapter.ENV_CLI_PATH, "compatible-liteparse-cli")
     monkeypatch.setattr("libs.ragsearch.parsers._liteparse.subprocess.run", lambda *args, **kwargs: FakeCompletedProcess())
 
     with pytest.raises(ParseCorruptError, match="not valid JSON"):
@@ -261,6 +269,7 @@ def test_liteparse_adapter_raises_for_missing_documents_list(monkeypatch, tmp_pa
         stderr = ""
 
     monkeypatch.setattr(LiteParseAdapter, "available", classmethod(lambda cls: True))
+    monkeypatch.setenv(LiteParseAdapter.ENV_CLI_PATH, "compatible-liteparse-cli")
     monkeypatch.setattr("libs.ragsearch.parsers._liteparse.subprocess.run", lambda *args, **kwargs: FakeCompletedProcess())
 
     with pytest.raises(ParseCorruptError, match="did not contain documents"):
@@ -277,6 +286,7 @@ def test_liteparse_adapter_raises_for_invalid_document_entry(monkeypatch, tmp_pa
         stderr = ""
 
     monkeypatch.setattr(LiteParseAdapter, "available", classmethod(lambda cls: True))
+    monkeypatch.setenv(LiteParseAdapter.ENV_CLI_PATH, "compatible-liteparse-cli")
     monkeypatch.setattr("libs.ragsearch.parsers._liteparse.subprocess.run", lambda *args, **kwargs: FakeCompletedProcess())
 
     with pytest.raises(ParseCorruptError, match="invalid document entry"):
@@ -293,6 +303,7 @@ def test_get_parser_prefers_liteparse_when_available(monkeypatch, tmp_path):
     path.write_text("hello", encoding="utf-8")
 
     monkeypatch.setattr(LiteParseAdapter, "available", classmethod(lambda cls: True))
+    monkeypatch.setenv(LiteParseAdapter.ENV_CLI_PATH, "compatible-liteparse-cli")
 
     parser = get_parser(path)
 
@@ -331,7 +342,7 @@ def test_fallback_parser_docx_missing_raises_unavailable(monkeypatch, tmp_path):
 
     monkeypatch.setattr(builtins, "__import__", fake_import)
 
-    with pytest.raises(ParserUnavailableError, match="python-docx"):
+    with pytest.raises(ParserUnavailableError, match="pip install python-docx"):
         list(FallbackParser().parse(path))
 
 
@@ -348,7 +359,7 @@ def test_fallback_parser_html_missing_bs4_raises_unavailable(monkeypatch, tmp_pa
 
     monkeypatch.setattr(builtins, "__import__", fake_import)
 
-    with pytest.raises(ParserUnavailableError, match="beautifulsoup4"):
+    with pytest.raises(ParserUnavailableError, match="pip install beautifulsoup4"):
         list(FallbackParser().parse(path))
 
 
@@ -369,3 +380,58 @@ def test_get_parser_raises_for_unknown_extension(tmp_path):
 
     with pytest.raises(UnsupportedFileTypeError, match="Unsupported file type"):
         get_parser(path)
+
+
+def test_liteparse_is_not_selected_by_default_even_with_node_and_npx(monkeypatch, tmp_path):
+    # The npm package the adapter used to call does not exist, and the real LiteParse CLI
+    # has a different interface (#100), so LiteParse must be opted into explicitly.
+    path = tmp_path / "sample.pdf"
+    path.write_bytes(b"%PDF-1.4")
+    monkeypatch.delenv(LiteParseAdapter.ENV_CLI_PATH, raising=False)
+    monkeypatch.setattr("libs.ragsearch.parsers._liteparse.shutil.which", lambda name: f"/usr/bin/{name}")
+
+    assert LiteParseAdapter.available() is False
+    assert isinstance(get_parser(path), FallbackParser)
+
+
+def test_liteparse_without_configured_cli_raises_clear_unavailable_error(monkeypatch, tmp_path):
+    path = tmp_path / "sample.pdf"
+    path.write_bytes(b"%PDF-1.4")
+    monkeypatch.delenv(LiteParseAdapter.ENV_CLI_PATH, raising=False)
+
+    with pytest.raises(ParserUnavailableError, match="RAGSEARCH_LITEPARSE_CLI"):
+        list(LiteParseAdapter().parse(path))
+
+
+def test_liteparse_never_invokes_an_unpublished_npm_package(monkeypatch, tmp_path):
+    path = tmp_path / "sample.txt"
+    path.write_text("hello", encoding="utf-8")
+    monkeypatch.setenv(LiteParseAdapter.ENV_CLI_PATH, "compatible-liteparse-cli")
+
+    command = LiteParseAdapter()._build_command(path)
+
+    assert command == ["compatible-liteparse-cli", "--json", str(path)]
+    assert not any("npx" in part or "@run-llama" in part for part in command)
+
+
+def test_fallback_parser_pdf_missing_pypdf_names_the_package_to_install(monkeypatch, tmp_path):
+    path = tmp_path / "sample.pdf"
+    path.write_bytes(b"%PDF-1.4")
+
+    original_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "pypdf":
+            raise ImportError("missing pypdf")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    with pytest.raises(ParserUnavailableError, match="pip install pypdf"):
+        list(FallbackParser().parse(path))
+
+
+@pytest.mark.parametrize("module", ["pypdf", "docx", "bs4"])
+def test_fallback_parser_dependencies_are_installed_with_ragsearch(module):
+    # pypdf, python-docx and beautifulsoup4 are regular dependencies (#100).
+    __import__(module)
