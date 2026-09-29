@@ -4620,7 +4620,10 @@ enabler = ["pytest-enabler (>=3.4)"]
 test = ["big-O", "jaraco.functools", "jaraco.itertools", "jaraco.test", "more_itertools", "pytest (>=6,!=8.1.*)", "pytest-ignore-flaky"]
 type = ["pytest-mypy (>=1.0.1)"]
 
+[extras]
+chromadb = ["chromadb"]
+
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<4.0"
-content-hash = "ce96831526448added45da89d2c2aacc5f7243040eda5bb508d7cde6eef47cfd"
+content-hash = "18a6b4641f89ebfc3b2f5ffc7d8a80d1e2ec2de8802cf3e6be3d172b5e8fc3fe"

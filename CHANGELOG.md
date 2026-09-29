@@ -51,6 +51,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- `MissingOptionalDependencyError` (a `RagSearchError` and `ImportError`), raised when a feature
+  needs an optional extra that is not installed. ([#126](https://github.com/mrutunjay-kinagi/ragsearch/pull/126), [#125](https://github.com/mrutunjay-kinagi/ragsearch/issues/125))
+
 - `run(host="127.0.0.1", port=8080)`: the web server's host and port are now parameters; an
   invalid port raises `ValueError`. ([#122](https://github.com/mrutunjay-kinagi/ragsearch/pull/122), [#104](https://github.com/mrutunjay-kinagi/ragsearch/issues/104))
 
@@ -78,6 +81,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   ([#90](https://github.com/mrutunjay-kinagi/ragsearch/pull/90))
 
 ### Changed
+
+- **chromadb is now an optional extra: `pip install 'ragsearch[chromadb]'`.** The base install no
+  longer includes it (47 instead of 101 packages, about 248 MB instead of 556 MB of site-packages),
+  and `from ragsearch import setup` is faster (about 420 ms instead of 660 ms). chromadb releases up to
+  1.5.9 carry unpatched upstream advisories (GHSA-f4j7-r4q5-qw2c / CVE-2026-45829,
+  GHSA-36p7-vc44-83pf, GHSA-2wm9-hf6c-p5cr). They affect Chroma's server, not the embedded client
+  ragsearch uses, but security scanners flag every environment that installs it. If you use
+  `use_chromadb=True`, install the extra; without it, `setup()` raises
+  `MissingOptionalDependencyError` with the install command. ([#126](https://github.com/mrutunjay-kinagi/ragsearch/pull/126), [#125](https://github.com/mrutunjay-kinagi/ragsearch/issues/125))
 
 - **Development dependencies refreshed** after dropping Python 3.9: the lock file was regenerated
   (for example numpy 2.2, faiss-cpu 1.15, click 8.5, soupsieve 2.10), and pytest moves to 9.x.

@@ -45,6 +45,10 @@ class EmbeddingProbeError(RagSearchError, RuntimeError):
     """
 
 
+class MissingOptionalDependencyError(RagSearchError, ImportError):
+    """Raised when a feature needs an optional extra that is not installed (e.g. ragsearch[chromadb])."""
+
+
 class ModelNotFoundError(RagSearchError):
     """Raised when a provider rejects the configured model name as unknown or retired."""
 

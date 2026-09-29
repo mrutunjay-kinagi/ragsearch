@@ -39,7 +39,7 @@ setup(
 | `llm_api_key` | str | required | Required by the current setup contract |
 | `embedding_provider` | str | "cohere" | Options: "cohere", "sentence_transformers", "openai", "ollama" |
 | `llm_provider` | str | "cohere" | Options: "cohere", "openai", "ollama" |
-| `use_chromadb` | bool | False | Use ChromaDB instead of FAISS (`search()`/`answer()` currently fail in this mode, [#76](https://github.com/mrutunjay-kinagi/ragsearch/issues/76)) |
+| `use_chromadb` | bool | False | Use ChromaDB instead of FAISS; needs `pip install 'ragsearch[chromadb]'` (`search()`/`answer()` currently fail in this mode, [#76](https://github.com/mrutunjay-kinagi/ragsearch/issues/76)) |
 | `embeddings_dir` | str | None | Directory for embedding manifests and cache files |
 | `chunking_strategy` | ChunkingStrategy | None | Chunking strategy. Default: 150-word windows with 30-word overlap for unstructured files, one chunk per row for structured files |
 | `max_context_tokens` | int or None | 3000 | Cap on the estimated tokens of the sources `answer()` sends to the LLM; `None` disables it |

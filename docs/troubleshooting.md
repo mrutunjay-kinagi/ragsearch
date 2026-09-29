@@ -149,6 +149,10 @@ engine = setup(
 )
 ```
 
+### `MissingOptionalDependencyError: ChromaDB mode needs the optional 'chromadb' extra`
+
+ChromaDB is an optional extra since 0.2.0. Install it with `pip install 'ragsearch[chromadb]'`, or use the default FAISS backend (ChromaDB mode is currently broken anyway, [#76](https://github.com/mrutunjay-kinagi/ragsearch/issues/76)).
+
 ### "No data found in the provided DataFrame"
 
 **Solution:**
