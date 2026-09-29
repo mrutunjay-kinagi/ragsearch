@@ -29,7 +29,14 @@ try:
     from cohere import Client as CohereClient
 except ImportError:
     CohereClient = None  # type: ignore[assignment,misc]
-from .errors import EmbeddingProbeError, ModelNotFoundError, NoDataFoundError, ParsingError, RagSearchError
+from .errors import (
+    EmbeddingProbeError,
+    ModelNotFoundError,
+    NoDataFoundError,
+    ParsingError,
+    RagSearchError,
+    provider_error_message,
+)
 from .embedding_models import create_embedding_model, infer_embedding_dimension
 from .llm_clients import create_llm_client
 from .parsers import FallbackParser, LiteParseAdapter, get_parser
@@ -89,7 +96,7 @@ def _resolve_embedding_api_key(
         return llm_api_key
     raise ValueError(
         f"embedding_provider '{embedding_provider}' differs from llm_provider '{llm_provider}', so "
-        f"llm_api_key (a {llm_provider} key) is not sent to {embedding_provider}. "
+        f"llm_api_key (your {llm_provider} key) is not sent to {embedding_provider}. "
         f"Pass embedding_api_key with your {embedding_provider} API key."
     )
 
@@ -366,7 +373,8 @@ def setup(data_path: Path,
         except Exception as exc:
             raise EmbeddingProbeError(
                 f"Could not determine the embedding dimension: the probe embedding from the "
-                f"'{embedding_provider_name}' embedding provider failed ({type(exc).__name__}: {exc}). "
+                f"'{embedding_provider_name}' embedding provider failed "
+                f"({type(exc).__name__}: {provider_error_message(exc)}). "
                 "Check embedding_provider, embedding_model_name, the embedding API key and network access; "
                 "if the error was transient, call setup() again.",
                 cause=exc,

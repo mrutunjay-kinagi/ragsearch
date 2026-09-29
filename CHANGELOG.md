@@ -14,10 +14,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   `llm_api_key` even when the two providers differed, so, for example, an OpenAI key was sent to
   Cohere. Separately, Cohere embeddings always used `llm_api_key` and ignored `embedding_api_key`, so
   an OpenAI LLM with Cohere embeddings could not work. Each provider now gets its own key, and
-  mixed providers work. ([#100](https://github.com/mrutunjay-kinagi/ragsearch/pull/100))
+  mixed providers work. ([#101](https://github.com/mrutunjay-kinagi/ragsearch/pull/101))
 - **Importing ragsearch no longer configures the root logger.** `ragsearch.vector_db` called
   `logging.basicConfig(level=INFO)` at import time, overriding the host application's logging
-  setup. It now logs through a module-level logger. ([#100](https://github.com/mrutunjay-kinagi/ragsearch/pull/100))
+  setup. It now logs through a module-level logger. ([#101](https://github.com/mrutunjay-kinagi/ragsearch/pull/101))
 
 - **Default Cohere setup works again.** The Cohere adapters now send an explicit model:
   `embed-v4.0` for embeddings and `command-a-03-2025` for chat. Before, Cohere fell back to its
@@ -43,7 +43,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Added
 
 - `EmbeddingProbeError` (a `RagSearchError` and `RuntimeError`), raised when `setup()` cannot
-  determine the embedding dimension. ([#100](https://github.com/mrutunjay-kinagi/ragsearch/pull/100))
+  determine the embedding dimension. ([#101](https://github.com/mrutunjay-kinagi/ragsearch/pull/101))
 
 - **A quickstart that uses the real API.** `docs/quickstart.md` now runs the real
   `setup()` / `answer()` path on a small insurance-claims sample. It needs only
@@ -65,13 +65,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - **`setup()` fails fast when the embedding-dimension probe fails.** It used to log a warning
   and fall back to dimension 4096, which only suited Cohere's retired `large` model and otherwise
   failed later with `AssertionError: d == self.d`. It now raises `EmbeddingProbeError` naming the
-  provider and the cause. ([#100](https://github.com/mrutunjay-kinagi/ragsearch/pull/100))
+  provider and the cause. ([#101](https://github.com/mrutunjay-kinagi/ragsearch/pull/101))
 - **`embedding_api_key` is required when the embedding and LLM providers differ** (except for the
   keyless `ollama` and `sentence_transformers` embedding providers). `setup()` raises a
   `ValueError` instead of sending `llm_api_key` to a different provider. Same-provider setups
-  (such as the Cohere default) keep defaulting to `llm_api_key`. ([#100](https://github.com/mrutunjay-kinagi/ragsearch/pull/100))
+  (such as the Cohere default) keep defaulting to `llm_api_key`. ([#101](https://github.com/mrutunjay-kinagi/ragsearch/pull/101))
 - **ragsearch no longer prints INFO logs by default.** Applications that want them should
-  configure logging themselves, for example `logging.basicConfig(level=logging.INFO)`. ([#100](https://github.com/mrutunjay-kinagi/ragsearch/pull/100))
+  configure logging themselves, for example `logging.basicConfig(level=logging.INFO)`. ([#101](https://github.com/mrutunjay-kinagi/ragsearch/pull/101))
 
 - **README rewritten so every example runs as written** (given a key). It adds a "what makes
   ragsearch different" summary, a known-issues link, a short sample-data excerpt instead of the raw
@@ -97,4 +97,4 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - Reusing `llm_api_key` for the embedding provider when `llm_provider` needs no key (`ollama`)
   and `embedding_api_key` is not given. It still works, but emits a `DeprecationWarning`. Pass
-  `embedding_api_key` instead; the fallback will be removed in a future release. ([#100](https://github.com/mrutunjay-kinagi/ragsearch/pull/100))
+  `embedding_api_key` instead; the fallback will be removed in a future release. ([#101](https://github.com/mrutunjay-kinagi/ragsearch/pull/101))
