@@ -20,6 +20,7 @@ The returned RagSearchEngine instance will use the selected backend for queries.
 """
 import os
 import logging
+import warnings
 from pathlib import Path
 from time import perf_counter
 from typing import Optional
@@ -28,7 +29,7 @@ try:
     from cohere import Client as CohereClient
 except ImportError:
     CohereClient = None  # type: ignore[assignment,misc]
-from .errors import ModelNotFoundError, NoDataFoundError, ParsingError, RagSearchError
+from .errors import EmbeddingProbeError, ModelNotFoundError, NoDataFoundError, ParsingError, RagSearchError
 from .embedding_models import create_embedding_model, infer_embedding_dimension
 from .llm_clients import create_llm_client
 from .parsers import FallbackParser, LiteParseAdapter, get_parser
@@ -42,6 +43,8 @@ from .engine import RagSearchEngine
 STRUCTURED_EXTENSIONS = {".csv", ".json", ".parquet", ".pq"}
 SUPPORTED_EMBEDDING_PROVIDERS = {"cohere", "openai", "ollama", "sentence_transformers"}
 SUPPORTED_LLM_PROVIDERS = {"cohere", "openai", "ollama"}
+# Providers that do not authenticate with an API key.
+KEYLESS_PROVIDERS = {"ollama", "sentence_transformers"}
 logger = logging.getLogger(__name__)
 
 
@@ -56,6 +59,39 @@ def _validate_provider(provider: str, supported: set[str], kind: str) -> str:
             f"Unsupported {kind} provider: {provider}. Supported providers: {', '.join(sorted(supported))}."
         )
     return normalized
+
+
+def _resolve_embedding_api_key(
+    embedding_provider: str,
+    llm_provider: str,
+    embedding_api_key: Optional[str],
+    llm_api_key: str,
+) -> Optional[str]:
+    """Pick the embedding provider's API key without sending one provider's key to another.
+
+    llm_api_key is only reused for embeddings when both providers are the same.
+    """
+    if embedding_api_key:
+        return embedding_api_key
+    if embedding_provider in KEYLESS_PROVIDERS:
+        return None
+    if embedding_provider == llm_provider:
+        return llm_api_key
+    if llm_provider in KEYLESS_PROVIDERS:
+        # The LLM provider ignores llm_api_key, so it can only have been meant for embeddings.
+        warnings.warn(
+            f"Using llm_api_key for the '{embedding_provider}' embedding provider because llm_provider "
+            f"'{llm_provider}' needs no key. Pass embedding_api_key instead; this fallback will be removed "
+            "in a future release.",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        return llm_api_key
+    raise ValueError(
+        f"embedding_provider '{embedding_provider}' differs from llm_provider '{llm_provider}', so "
+        f"llm_api_key (a {llm_provider} key) is not sent to {embedding_provider}. "
+        f"Pass embedding_api_key with your {embedding_provider} API key."
+    )
 
 
 def build_vector_backend(*, embedding_dim: int):
@@ -189,7 +225,9 @@ def setup(data_path: Path,
         observability_max_events (Optional[int]): Maximum in-memory observability events retained by engine.
         embedding_provider (str): Embedding provider identifier (default: "cohere").
         embedding_model_name (str): Optional provider-specific model name.
-        embedding_api_key (str): Optional API key for embedding provider; defaults to llm_api_key.
+        embedding_api_key (str): Optional API key for the embedding provider. Defaults to llm_api_key only
+            when embedding_provider and llm_provider are the same; required when they differ, unless the
+            embedding provider needs no key (ollama, sentence_transformers).
         embedding_base_url (str): Optional base URL for provider endpoints (for OpenAI-compatible or Ollama hosts).
         llm_provider (str): LLM provider identifier (default: "cohere").
         llm_model_name (str): Optional provider-specific chat model name.
@@ -202,7 +240,9 @@ def setup(data_path: Path,
         NoDataFoundError: If no data found:
             - Structured: Empty file
             - Unstructured: Parser returns no documents or all content is empty
-        ValueError: If CSV/JSON/Parquet file format is invalid (structured path only).
+        ValueError: If CSV/JSON/Parquet file format is invalid (structured path only), or if the
+            providers differ and embedding_api_key is missing.
+        EmbeddingProbeError: If the embedding dimension cannot be determined from a probe embedding.
         RagSearchError: If unstructured parser fails (UnsupportedFileTypeError, ParsingError, etc.).
         RuntimeError: For other data loading, Cohere client, or vector database errors.
     """
@@ -256,14 +296,27 @@ def setup(data_path: Path,
     except ValueError as e:
         raise RuntimeError(f"Failed to initialize embedding model: {e}") from e
 
-    cohere_client = None
-    if llm_provider_name == "cohere" or embedding_provider_name == "cohere":
-        if CohereClient is None:
-            raise RuntimeError("Cohere SDK is not installed. Install package 'cohere'.")
-        try:
-            cohere_client = CohereClient(api_key=llm_api_key)
-        except Exception as e:
-            raise RuntimeError(f"Failed to initialize Cohere client: {e}") from e
+    resolved_embedding_api_key = _resolve_embedding_api_key(
+        embedding_provider_name, llm_provider_name, embedding_api_key, llm_api_key
+    )
+
+    # One Cohere client per distinct key, so the LLM and embeddings each use their own key.
+    cohere_clients = {}
+
+    def cohere_client_for(api_key):
+        if api_key not in cohere_clients:
+            if CohereClient is None:
+                raise RuntimeError("Cohere SDK is not installed. Install package 'cohere'.")
+            try:
+                cohere_clients[api_key] = CohereClient(api_key=api_key)
+            except Exception as e:
+                raise RuntimeError(f"Failed to initialize Cohere client: {e}") from e
+        return cohere_clients[api_key]
+
+    llm_cohere_client = cohere_client_for(llm_api_key) if llm_provider_name == "cohere" else None
+    embedding_cohere_client = (
+        cohere_client_for(resolved_embedding_api_key) if embedding_provider_name == "cohere" else None
+    )
 
     try:
         llm_client = create_llm_client(
@@ -271,7 +324,7 @@ def setup(data_path: Path,
             api_key=llm_api_key,
             model=llm_model_name,
             base_url=llm_base_url,
-            cohere_client=cohere_client,
+            cohere_client=llm_cohere_client,
         )
     except Exception as e:
         raise RuntimeError(f"Failed to initialize LLM client: {e}") from e
@@ -279,10 +332,10 @@ def setup(data_path: Path,
     try:
         embedding_model = create_embedding_model(
             provider=embedding_provider_name,
-            api_key=embedding_api_key or llm_api_key,
+            api_key=resolved_embedding_api_key,
             model=embedding_model_name,
             base_url=embedding_base_url,
-            cohere_client=cohere_client,
+            cohere_client=embedding_cohere_client,
         )
     except Exception as e:
         raise RuntimeError(f"Failed to initialize embedding model: {e}") from e
@@ -311,9 +364,13 @@ def setup(data_path: Path,
             # A wrong model name is a configuration error, not a transient probe failure.
             raise
         except Exception as exc:
-            # Preserve legacy fallback behavior when probe-time inference fails.
-            logger.warning("Falling back to legacy embedding dimension 4096: %s", exc)
-            embedding_dim = 4096
+            raise EmbeddingProbeError(
+                f"Could not determine the embedding dimension: the probe embedding from the "
+                f"'{embedding_provider_name}' embedding provider failed ({type(exc).__name__}: {exc}). "
+                "Check embedding_provider, embedding_model_name, the embedding API key and network access; "
+                "if the error was transient, call setup() again.",
+                cause=exc,
+            ) from exc
         try:
             vector_db = build_vector_backend(embedding_dim=embedding_dim)
         except Exception as e:

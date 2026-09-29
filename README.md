@@ -161,6 +161,8 @@ Incremental indexing (FAISS backend):
     - `changed_records`: previously-seen records with changed content hash.
     - `cache_invalidated_reason`: why the cache was discarded and everything re-embedded (empty when the cache was reusable).
 
+Logging: ragsearch does not configure logging. To see its progress messages, configure logging in your application, for example `logging.basicConfig(level=logging.INFO)`.
+
 Observability events:
 - `rag_engine.observability_events` stores structured events emitted during indexing, retrieval and generation.
 - Retrieval events include `query`, `top_k`, `results_count`, `latency_ms`.
@@ -247,7 +249,7 @@ Embedding providers, selected with `setup()` parameters:
 
 Optional provider settings:
 - `embedding_model_name`: provider-specific model id (Cohere default: `embed-v4.0`)
-- `embedding_api_key`: embedding provider key (defaults to `llm_api_key`)
+- `embedding_api_key`: embedding provider key. It defaults to `llm_api_key` only when the embedding and LLM providers are the same, and is required when they differ (except for the keyless `ollama` and `sentence_transformers`), so one provider's key is never sent to another.
 - `embedding_base_url`: custom endpoint URL (OpenAI-compatible server or Ollama host)
 
 Example (requires `pip install openai` and an OpenAI key in `OPENAI_API_KEY`):
@@ -263,7 +265,7 @@ openai_embeddings_engine = setup(
 
 Custom embedding models must provide `embed(texts=[...])` and return an object with an `embeddings` attribute holding a non-empty sequence of numeric vectors.
 
-`setup()` probes the embedding model to find the vector dimension. If the probe fails because of an invalid response shape or a transient provider error, it falls back to dimension 4096. An unknown or retired model name is not treated as a probe failure: `setup()` raises `ModelNotFoundError` naming the parameter to change.
+`setup()` probes the embedding model to find the vector dimension. If the probe fails (an invalid response shape, a provider or network error), `setup()` raises `EmbeddingProbeError` (a `RuntimeError`) explaining what failed, instead of guessing a dimension. An unknown or retired model name raises `ModelNotFoundError` naming the parameter to change.
 
 ### Changing the LLM provider
 
@@ -287,7 +289,18 @@ openai_engine = setup(
 )
 ```
 
-> **Mixing providers:** when embeddings use Cohere (the default), the Cohere client is currently created from `llm_api_key`, and `embedding_api_key` is ignored. So an OpenAI LLM combined with Cohere embeddings fails unless `llm_api_key` is also a Cohere key. Use one provider for both, as above, until this is fixed.
+**Mixing providers.** Give each provider its own key. For example, an OpenAI LLM with Cohere embeddings (the default embedding provider):
+```python
+mixed_engine = setup(
+    data_path,
+    os.environ["OPENAI_API_KEY"],
+    llm_provider="openai",
+    llm_model_name="gpt-4o-mini",
+    embedding_api_key=os.environ["COHERE_API_KEY"],
+)
+```
+
+When the providers differ and `embedding_api_key` is missing, `setup()` raises a `ValueError` instead of sending your OpenAI key to Cohere. The one exception is an LLM provider that needs no key (`ollama`): `llm_api_key` is then still used for the embedding provider, with a `DeprecationWarning`. Pass `embedding_api_key` instead, because this fallback will be removed.
 
 Custom LLM clients must implement `generate(prompt, **kwargs)` and return a string.
 

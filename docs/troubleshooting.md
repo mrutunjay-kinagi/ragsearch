@@ -129,6 +129,26 @@ engine = setup(
 
 This is expected, once, after you change `embedding_provider` or `embedding_model_name`, or after upgrading from ragsearch 0.1.5 or earlier. The cached vectors were produced by a different model (or one with a different vector dimension), so they are discarded and all N records are embedded again. The cause is in the message and in `engine.ingestion_diagnostics["indexing"]["cache_invalidated_reason"]`. Later runs reuse the new cache as usual.
 
+### `EmbeddingProbeError: Could not determine the embedding dimension`
+
+`setup()` embeds one probe text to learn the vector dimension before building the index. The message says which provider failed and why (for example an authentication or network error, or a custom model returning the wrong shape). Fix the cause and call `setup()` again. Earlier versions silently fell back to dimension 4096 here and failed later with `AssertionError: d == self.d`.
+
+### `ValueError: embedding_provider '...' differs from llm_provider '...'`
+
+The embedding and LLM providers differ and no `embedding_api_key` was given. `setup()` refuses to send one provider's API key to another. Pass the embedding provider's own key:
+
+```python
+from pathlib import Path
+from ragsearch import setup
+
+engine = setup(
+    Path("data.csv"),
+    llm_api_key="your-openai-key",
+    llm_provider="openai",
+    embedding_api_key="your-cohere-key",  # Cohere is the default embedding provider
+)
+```
+
 ### "No data found in the provided DataFrame"
 
 **Solution:**

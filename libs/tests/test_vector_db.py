@@ -108,3 +108,30 @@ class TestVectorDBSearch:
         db = self._make_db()
         results = db.search([1.0, 0.0, 0.0, 0.0], top_k=10)
         assert len(results) <= 3
+
+
+def test_importing_the_package_does_not_configure_the_root_logger(tmp_path):
+    # A fresh interpreter: in-process, earlier tests may already have configured logging.
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    package_root = Path(__file__).resolve().parents[1]
+    code = (
+        "import logging\n"
+        "import ragsearch.vector_db, ragsearch.engine, ragsearch.setup\n"
+        "root = logging.getLogger()\n"
+        "assert root.handlers == [], root.handlers\n"
+        "assert root.level == logging.WARNING, root.level\n"
+        "assert logging.getLogger('ragsearch.vector_db').handlers == []\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-W", "ignore", "-c", code],
+        cwd=tmp_path,
+        env={"PYTHONPATH": str(package_root), "PATH": ""},
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+
+    assert result.returncode == 0, result.stderr
