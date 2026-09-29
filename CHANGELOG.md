@@ -87,6 +87,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- **Package metadata and docs describe what 0.2.0 does.** New one-line PyPI description; the author
+  email is fixed; project URLs (documentation, changelog, issues), keywords and classifiers (Alpha,
+  Python 3.10–3.14) are added. The README gains notes on whole-document questions (raise `top_k`),
+  on a fully local Ollama setup (a placeholder `llm_api_key` is still required, #79), and on Python
+  support for the chromadb extra. ADR-0009 is accepted. The cookbook and notebook carry a note that
+  they predate 0.2.0 and are being rewritten (#112). ([#130](https://github.com/mrutunjay-kinagi/ragsearch/pull/130), [#108](https://github.com/mrutunjay-kinagi/ragsearch/issues/108))
+
 - **Release workflow hardened (maintainers).** Publishing runs only from a GitHub Release (the
   manual trigger is removed). The release tag must equal `v` + the `pyproject.toml` version, and the
   tagged commit must be on `master`, or on `develop`/`master` for candidates. Pre-releases with

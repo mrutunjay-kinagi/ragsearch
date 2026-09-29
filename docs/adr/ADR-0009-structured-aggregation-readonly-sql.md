@@ -1,6 +1,6 @@
 # ADR-0009: Structured-data aggregation via read-only SQL
 
-- Status: proposed
+- Status: accepted (2026-09-30); not implemented in 0.2.0, planned after it
 - Date: 2026-09-24
 - Related issue: #81
 

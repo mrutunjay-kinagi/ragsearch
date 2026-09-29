@@ -49,3 +49,38 @@ def test_numpy_split_gives_every_supported_python_a_release_with_wheels():
     for block in blocks:
         wheels |= set(re.findall(r"-cp(3\d+)-", block))
     assert {"310", "311", "312", "313", "314"} <= wheels, sorted(wheels)
+
+
+# --- PyPI metadata (#108): frozen at publish time, so pinned by tests -------------------------------
+
+
+def _poetry_value(key):
+    section = PYPROJECT.split("[tool.poetry]", 1)[1].split("\n[", 1)[0]
+    match = re.search(rf'^{key} = "([^"]*)"', section, re.MULTILINE)
+    return match.group(1) if match else None
+
+
+def test_description_is_one_honest_line():
+    description = _poetry_value("description")
+    assert description and "\n" not in description and len(description) <= 120, description
+    for claim in ("ChromaDB", "scalable", "trust", "abstain"):
+        assert claim.lower() not in description.lower(), f"description must not claim {claim!r}"
+
+
+def test_author_email_is_well_formed():
+    authors = re.search(r"^authors = \[(.*)\]$", PYPROJECT, re.MULTILINE).group(1)
+    assert re.fullmatch(r'"Mrutunjay Kinagi <[^\s<>@]+@[^\s<>@]+\.[a-z]+>"', authors), authors
+
+
+def test_project_urls_are_declared():
+    assert _poetry_value("homepage") and _poetry_value("repository") and _poetry_value("documentation")
+    urls = PYPROJECT.split("[tool.poetry.urls]", 1)[1].split("\n[", 1)[0]
+    assert re.search(r'^"?Changelog"? = "https://', urls, re.MULTILINE), urls
+    assert re.search(r'^"?Issues"? = "https://', urls, re.MULTILINE), urls
+
+
+def test_keywords_and_classifiers_are_declared():
+    keywords = re.search(r"^keywords = \[(.*?)\]", PYPROJECT, re.MULTILINE | re.DOTALL)
+    assert keywords and "rag" in keywords.group(1)
+    classifiers = re.search(r"^classifiers = \[(.*?)\]", PYPROJECT, re.MULTILINE | re.DOTALL)
+    assert classifiers and "Development Status ::" in classifiers.group(1)
