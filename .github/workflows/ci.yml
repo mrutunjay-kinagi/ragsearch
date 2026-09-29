@@ -1,0 +1,152 @@
+name: CI
+
+# Runs on every pull request and on pushes to develop and master (#106).
+# No job calls a real provider API: tests and the packaging check use offline models only,
+# and no provider secrets are available to this workflow.
+
+on:
+  pull_request:
+  push:
+    branches: [develop, master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The version that generated poetry.lock.
+  POETRY_VERSION: "1.8.3"
+
+jobs:
+  tests:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - id: python
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install Poetry
+        run: pipx install "poetry==${POETRY_VERSION}"
+      - name: Install dependencies (base install, without the chromadb extra)
+        run: |
+          poetry env use "${{ steps.python.outputs.python-path }}"
+          poetry install --no-interaction
+      - name: Run tests
+        run: poetry run pytest -rsx
+
+  tests-chromadb:
+    name: Tests with the chromadb extra
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - id: python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install Poetry
+        run: pipx install "poetry==${POETRY_VERSION}"
+      - name: Install dependencies with the chromadb extra
+        run: |
+          poetry env use "${{ steps.python.outputs.python-path }}"
+          poetry install --no-interaction --extras chromadb
+      - name: Run tests (includes the ChromaDB strict xfails for #76)
+        run: poetry run pytest -rsx
+
+  docs:
+    name: Docs build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - id: python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install Poetry
+        run: pipx install "poetry==${POETRY_VERSION}"
+      - name: Install dependencies
+        run: |
+          poetry env use "${{ steps.python.outputs.python-path }}"
+          poetry install --no-interaction
+      - name: Build the docs (same commands as python-publish.yml)
+        run: |
+          poetry run sphinx-apidoc -o docs/source libs/ragsearch
+          poetry run sphinx-build -b html docs/ docs/build
+
+  build:
+    name: Build wheel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - id: python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install Poetry
+        run: pipx install "poetry==${POETRY_VERSION}"
+      - name: Build sdist and wheel
+        run: |
+          poetry env use "${{ steps.python.outputs.python-path }}"
+          poetry build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  wheel-install:
+    name: Clean wheel install (Python ${{ matrix.python-version }})
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+      # Only the check script and the quickstart doc; the package itself comes from the wheel.
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          path: repo-files
+          sparse-checkout: |
+            .github/ci/offline_quickstart.py
+            docs/quickstart.md
+          sparse-checkout-cone-mode: false
+      - name: Install the wheel into a clean virtual environment
+        run: |
+          python -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/python" -m pip install --upgrade pip
+          "$RUNNER_TEMP/venv/bin/python" -m pip install dist/*.whl
+      - name: chromadb is not installed by default
+        run: |
+          if "$RUNNER_TEMP/venv/bin/python" -m pip show chromadb; then
+            echo "chromadb must not be part of the base install (#125)"; exit 1
+          fi
+      - name: Offline quickstart on a CSV, a PDF and a DOCX
+        working-directory: ${{ runner.temp }}
+        run: |
+          "$RUNNER_TEMP/venv/bin/python" "$GITHUB_WORKSPACE/repo-files/.github/ci/offline_quickstart.py" \
+            "$GITHUB_WORKSPACE/repo-files/docs/quickstart.md"

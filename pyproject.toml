@@ -22,6 +22,12 @@ pandas = "^2.2.3"
 # scanners flag, even though ragsearch only uses the embedded client, and ChromaDB mode is broken (#76).
 chromadb = {version = "^1.0.20", optional = true}
 fastavro = "^1.12.0"
+# Used directly (vector_db). Split by Python so every supported version gets a release with wheels:
+# numpy 2.3+ requires Python 3.11 and ships 3.14 wheels (2.3.3+); 2.2.x is the last line for 3.10.
+numpy = [
+    {version = ">=2.2.6,<2.3", python = "<3.11"},
+    {version = ">=2.3.3", python = ">=3.11"},
+]
 # Built-in document parsers (#100). Floors: pypdf 6.16.2 is the lowest release with no known
 # OSV advisories that extracts text like the latest (6.16.1 drops word spacing); python-docx
 # 0.8.11 and beautifulsoup4 4.9.0 are the oldest releases verified with the fallback parser.
@@ -33,8 +39,6 @@ beautifulsoup4 = ">=4.9.0"
 chromadb = ["chromadb"]
 
 [tool.poetry.group.dev.dependencies]
-# Installed for the ChromaDB tests (strict xfails for #76); the published package keeps it optional.
-chromadb = "^1.0.20"
 # 9.0.3 fixes GHSA-6w46-j5rx-g56g (tmpdir handling); pytest 9 needs Python >= 3.10.
 pytest = "^9.0.3"
 pylint = "^3.3.1"
