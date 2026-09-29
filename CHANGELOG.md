@@ -51,6 +51,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- `run(host="127.0.0.1", port=8080)`: the web server's host and port are now parameters; an
+  invalid port raises `ValueError`. ([#122](https://github.com/mrutunjay-kinagi/ragsearch/pull/122), [#104](https://github.com/mrutunjay-kinagi/ragsearch/issues/104))
+
 - **Answer context budget.** `answer()` adds retrieved sources in score order up to
   `max_context_tokens` estimated tokens (default 3000; set it on `setup()` or per `answer()` call,
   `None` disables it). The response gains `context_sources`, `context_truncated` and
@@ -75,6 +78,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   ([#90](https://github.com/mrutunjay-kinagi/ragsearch/pull/90))
 
 ### Changed
+
+- **The web server listens on `127.0.0.1` by default.** `run()` used to bind `0.0.0.0` (every
+  network interface) with no authentication, so anyone who could reach port 8080 could spend your
+  API credits through `/answer` and read the indexed data. To serve other machines deliberately, call
+  `run(host="0.0.0.0")` (ideally behind an authenticating reverse proxy); `run()` then logs a
+  warning. ([#122](https://github.com/mrutunjay-kinagi/ragsearch/pull/122), [#104](https://github.com/mrutunjay-kinagi/ragsearch/issues/104))
 
 - **Unstructured files are chunked by default.** PDF, DOCX, HTML, Markdown and text files are
   split into 150-word windows with 30 words of overlap, instead of one chunk per file. That used to
