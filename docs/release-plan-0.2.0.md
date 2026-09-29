@@ -21,13 +21,17 @@ Ship **0.2.0, "It works"** to PyPI.
 
 1. One work item = one issue = one PR, targeting `develop`. Never `master`, except the final release PR in Item 8.
 2. Reproduce before fixing: a failing test first.
-3. Run the full suite before every PR. No new failures. Current baseline after #103: 171 passed, 1 skipped, 2 xfailed.
+3. Run the full suite before every PR. No new failures. Baseline: 171 passed, 1 skipped, 2 xfailed after #103; 209 passed after #122.
 4. Preserve public contracts (`setup()`, `search()`, `answer()`, `/query`, `/answer`). Behaviour changes get a changelog entry explaining them.
 5. Check external facts (versions, APIs, tools) in official docs, never memory. Cite them in the PR.
 6. Every PR adds its own CHANGELOG entry under **Unreleased**.
 7. After every push, verify the remote SHA matches local. Never pipe commands in a way that hides exit codes.
 8. Never delete branches, change repo settings, tag, or publish. Prepare these and ask.
 9. **After each work item: stop, report (what changed, PR link, test results, surprises), and wait for my go-ahead.** Merge a PR only when I say so, with a regular merge commit.
+10. **After any PR merges into `develop`, close the issues it fixes** with the comment "Fixed in develop by #<PR>. Ships in 0.2.0." and the 0.2.0 milestone. Don't ask first.
+11. **Docs-only or internal PRs** (ADR status, planning files, issue text) may be merged by Claude Code, with a regular merge commit, once the full suite passes. Report them afterwards.
+12. **Code PRs:** stop and wait for my go-ahead before merging (rule 9).
+13. **If the permission check errors** (no verdict, not a denial), stop after the first error instead of retrying, and report which command it was.
 
 ---
 
