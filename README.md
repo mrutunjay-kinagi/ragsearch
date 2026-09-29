@@ -153,6 +153,7 @@ Note: supported extensions can be backend-dependent. LiteParse supports addition
 Incremental indexing behavior (FAISS backend):
 - `setup()` persists an embedding manifest in the embeddings directory and reuses cached embeddings for unchanged records.
 - New or changed records are re-embedded, while unchanged records are skipped for embedding generation.
+- The manifest records which embedding model and vector dimension produced the cache. If either changes, or the cache was written by ragsearch 0.1.5 or earlier (which stored neither), `setup()` logs a warning and re-embeds every record instead of reusing incompatible vectors.
 - After setup, `rag_engine.ingestion_diagnostics["indexing"]` reports deterministic counters:
     - `manifest_version`: manifest schema version.
     - `manifest_path`: on-disk manifest file path.
@@ -161,6 +162,7 @@ Incremental indexing behavior (FAISS backend):
     - `reused_records`: records reused from manifest cache.
     - `new_records`: records seen for the first time.
     - `changed_records`: previously-seen records with changed content hash.
+    - `cache_invalidated_reason`: why the cache was discarded and everything re-embedded (empty when the cache was reusable).
 
 Optional setup parameter:
 - `embeddings_dir`: custom directory for embedding artifacts and incremental manifest cache.

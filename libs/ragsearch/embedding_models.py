@@ -77,6 +77,7 @@ class SentenceTransformersEmbeddingAdapter:
     """Adapter for sentence-transformers models."""
 
     model: Any
+    model_name: str | None = None
 
     def embed(self, texts: Sequence[str]) -> EmbeddingResponse:
         encoded = self.model.encode(list(texts))
@@ -145,7 +146,8 @@ def create_embedding_model(
             raise RuntimeError(
                 "sentence-transformers is not installed. Install package 'sentence-transformers'."
             ) from exc
-        return SentenceTransformersEmbeddingAdapter(SentenceTransformer(model or DEFAULT_SENTENCE_TRANSFORMERS_MODEL))
+        model_name = model or DEFAULT_SENTENCE_TRANSFORMERS_MODEL
+        return SentenceTransformersEmbeddingAdapter(SentenceTransformer(model_name), model_name=model_name)
 
     if normalized_provider == "openai":
         if not api_key:
@@ -192,6 +194,21 @@ def extract_embeddings(response: Any) -> List[List[float]]:
             raise ValueError("Each embedding must be a numeric sequence.") from exc
 
     return normalized
+
+
+def describe_embedding_model(embedding_model: Any) -> str:
+    """Return a stable identity for an embedding model, used to validate cached embeddings.
+
+    The identity is the class name plus the model name, taken from a string
+    ``model_name`` or ``model`` attribute when the object has one
+    (for example ``"OpenAIEmbeddingAdapter:text-embedding-3-small"``).
+    """
+    identity = type(embedding_model).__name__
+    for attribute in ("model_name", "model"):
+        name = getattr(embedding_model, attribute, None)
+        if isinstance(name, str) and name.strip():
+            return f"{identity}:{name.strip()}"
+    return identity
 
 
 def infer_embedding_dimension(embedding_model: EmbeddingModel, probe_text: str = "dimension probe") -> int:

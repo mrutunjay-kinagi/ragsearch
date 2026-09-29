@@ -28,6 +28,7 @@ class VectorDB:
         if not isinstance(embedding_dim, int) or embedding_dim <= 0:
             raise ValueError("embedding_dim must be a positive integer")
         # Use IndexFlatIP for cosine similarity (requires normalized embeddings)
+        self.embedding_dim = embedding_dim
         self.index = faiss.IndexFlatIP(embedding_dim)
         self.metadata_store = {}  # Dictionary to store metadata
         self.current_id = 0  # Incremental ID to track embeddings

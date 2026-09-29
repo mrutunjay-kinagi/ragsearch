@@ -125,9 +125,9 @@ engine = setup(
 )
 ```
 
-### `RuntimeError: Embedding indexing failed` after changing the embedding model
+### Warning: `Embedding cache ... does not match the current embedding model (...). One-time re-embedding of N records; later runs reuse the rebuilt cache.`
 
-The local embedding cache (`embeddings_dir`, default `embeddings/`) is keyed by record content only, so vectors from a previous embedding model are reused even when the model, and its vector dimension, has changed. This also happens after upgrading from a ragsearch version whose Cohere default was the retired `large` model. Delete the cache directory, or pass a fresh `embeddings_dir`, after changing `embedding_provider` or `embedding_model_name`.
+This is expected, once, after you change `embedding_provider` or `embedding_model_name`, or after upgrading from ragsearch 0.1.5 or earlier. The cached vectors were produced by a different model (or one with a different vector dimension), so they are discarded and all N records are embedded again. The cause is in the message and in `engine.ingestion_diagnostics["indexing"]["cache_invalidated_reason"]`. Later runs reuse the new cache as usual.
 
 ### "No data found in the provided DataFrame"
 

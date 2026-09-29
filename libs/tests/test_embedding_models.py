@@ -13,6 +13,7 @@ from libs.ragsearch.embedding_models import (
     OpenAIEmbeddingAdapter,
     SentenceTransformersEmbeddingAdapter,
     create_embedding_model,
+    describe_embedding_model,
     extract_embeddings,
 )
 
@@ -157,3 +158,23 @@ def test_cohere_embedding_adapter_reraises_other_errors_unchanged():
 
     with pytest.raises(RuntimeError, match="temporarily unavailable"):
         CohereEmbeddingAdapter(_FailingClient()).embed(["probe"])
+
+
+def test_describe_embedding_model_includes_provider_model_name():
+    assert describe_embedding_model(
+        create_embedding_model(provider="cohere", cohere_client=_RecordingCohereClient())
+    ) == "CohereEmbeddingAdapter:embed-v4.0"
+    assert describe_embedding_model(
+        OpenAIEmbeddingAdapter(client=_OpenAIClient(), model="text-embedding-3-large")
+    ) == "OpenAIEmbeddingAdapter:text-embedding-3-large"
+    assert describe_embedding_model(
+        SentenceTransformersEmbeddingAdapter(model=object(), model_name="all-MiniLM-L6-v2")
+    ) == "SentenceTransformersEmbeddingAdapter:all-MiniLM-L6-v2"
+
+
+def test_describe_embedding_model_falls_back_to_class_name_for_custom_models():
+    class CustomEmbedder:
+        def embed(self, texts):
+            return SimpleNamespace(embeddings=[[1.0]])
+
+    assert describe_embedding_model(CustomEmbedder()) == "CustomEmbedder"
