@@ -27,7 +27,7 @@ Then explore:
 - Citations on every search result and answer.
 - Pluggable providers: Cohere (default), OpenAI and [OpenAI-compatible servers](#openai-compatible-endpoints), Ollama, and local sentence-transformers embeddings.
 - FAISS for fast in-memory vector search (ChromaDB support is being reworked, see [#76](https://github.com/mrutunjay-kinagi/ragsearch/issues/76)).
-- Unstructured parsing through LiteParse, with Python fallback parsers.
+- Built-in PDF, DOCX and HTML parsing (pypdf, python-docx, beautifulsoup4), included in the default install.
 - Incremental indexing: unchanged records reuse cached embeddings across runs.
 - Evaluation harness, diagnostics and observability events built in.
 - A simple web interface and HTTP API.
@@ -41,25 +41,16 @@ pip install ragsearch
 > The fixes described in this README are newer than the latest PyPI release (0.1.5). Until the next release, install from GitHub:
 > `pip install "git+https://github.com/mrutunjay-kinagi/ragsearch@develop"`
 
-Core dependencies (pandas, FAISS, Cohere, Flask, ChromaDB) are installed automatically. For the built-in fallback parsers for PDF, DOCX and HTML:
+All dependencies are installed automatically, including the document parsers for PDF (pypdf), DOCX (python-docx) and HTML (beautifulsoup4). Node.js is not needed.
 
-```bash
-pip install beautifulsoup4 pypdf python-docx
-```
-
-For LiteParse support, make sure Node.js 18+ and `npx` are available:
-
-```bash
-node --version
-npx --version
-```
+> **LiteParse is not supported yet.** LlamaIndex's LiteParse (npm `@llamaindex/liteparse`) has a different command-line interface from the one ragsearch was written for, so ragsearch does not use it automatically. Proper support (including OCR for scanned PDFs) is planned in [#102](https://github.com/mrutunjay-kinagi/ragsearch/issues/102).
 
 ## Basic usage
 
 The examples below run from a clone of this repository, using the small sample files in [`samples/quickstart/`](./samples/quickstart/), and read your Cohere key from the `COHERE_API_KEY` environment variable. Run them in order, as one script or one notebook.
 
 ### Step 1: Prepare your data
-Structured files (CSV/JSON/Parquet) are loaded with pandas. Unstructured files are parsed with LiteParse when it is available, and with the fallback parsers otherwise.
+Structured files (CSV/JSON/Parquet) are loaded with pandas. Unstructured files are parsed with the built-in parsers.
 
 **Example data** ([`samples/quickstart/insurance_claims.csv`](./samples/quickstart/insurance_claims.csv), first rows):
 ```csv
@@ -129,13 +120,9 @@ letter_engine = setup(Path("samples/quickstart/claim_letter.txt"), llm_api_key)
 print(letter_engine.answer("What caused the water damage?", top_k=1)["answer"])
 ```
 
-Parser selection behavior:
-- LiteParse is preferred when available (Node.js + npx installed).
-- If LiteParse is unavailable, the fallback parser is used for supported file types.
-- If LiteParse is selected but fails at runtime, `setup()` retries with the fallback parser when the file type is fallback-supported.
-- Unsupported types raise `UnsupportedFileTypeError`.
-
-Supported extensions depend on the parser: LiteParse also handles `.doc`, `.png`, `.jpg` and `.jpeg`, while the fallback parser supports `.txt`, `.md`, `.html`, `.htm`, `.pdf` and `.docx`.
+Parser behavior:
+- The built-in parser handles `.txt`, `.md`, `.html`, `.htm`, `.pdf` and `.docx`. Other types raise `UnsupportedFileTypeError`.
+- Advanced: setting the `RAGSEARCH_LITEPARSE_CLI` environment variable to a CLI that accepts `<cli> --json <file>` and prints `{"documents": [...]}` or `{"text": ...}` makes ragsearch try it first, and fall back to the built-in parser if it fails. The official LiteParse CLI does not use this interface yet ([#102](https://github.com/mrutunjay-kinagi/ragsearch/issues/102)).
 
 ## Diagnostics and incremental indexing
 
@@ -351,16 +338,17 @@ Edit `index.html` in `libs/ragsearch/templates` to adjust the UI layout.
 - **`ModelNotFoundError: Cohere embedding model '...' is not available`** (or `chat model`): the provider does not recognise the model name, or has retired it. Set `embedding_model_name` or `llm_model_name` (whichever the message names) to a current model from [Cohere's model list](https://docs.cohere.com/docs/models).
 - **`AssertionError: d == self.d`**: vector dimensions are normally inferred automatically. If this appears with a custom provider, check that your embed response contains consistent numeric vectors in `response.embeddings`.
 - **`ValueError: Embedding response must contain an 'embeddings' attribute`**: your custom embedding model does not follow the embedding contract; return an object with an `embeddings` sequence.
-- **DOCX content missing / scanned PDF gives `NoDataFoundError`**: with the built-in fallback parser (used when Node.js/LiteParse is not available), DOCX files are read paragraphs-only, so tables are skipped, and PDFs without a text layer yield no text because there is no OCR ([#83](https://github.com/mrutunjay-kinagi/ragsearch/issues/83)). Convert table-heavy DOCX files to PDF or text, and OCR scans before ingesting.
+- **DOCX content missing / scanned PDF gives `NoDataFoundError`**: with the built-in parser, DOCX files are read paragraphs-only, so tables are skipped, and PDFs without a text layer yield no text because there is no OCR ([#83](https://github.com/mrutunjay-kinagi/ragsearch/issues/83)). Convert table-heavy DOCX files to PDF or text, and OCR scans before ingesting.
 
 ### Parser pipeline troubleshooting
 
 | Error | Typical Cause | Resolution |
 | --- | --- | --- |
-| `ParserUnavailableError: LiteParse CLI not found` | Node.js/npx not installed, or custom CLI path invalid | Install Node.js 18+, verify `npx` works, or set `RAGSEARCH_LITEPARSE_CLI` to a valid executable |
+| `ParserUnavailableError: Cannot parse PDF files: the 'pypdf' package is not installed` (or `python-docx`, `beautifulsoup4`) | Incomplete installation: these are ragsearch dependencies | Run the `pip install ...` command from the message, or reinstall ragsearch |
+| `ParserUnavailableError: LiteParse CLI not found` | `RAGSEARCH_LITEPARSE_CLI` is not set, or points to a path that does not exist | Unset it to use the built-in parser, or fix the path (see [#102](https://github.com/mrutunjay-kinagi/ragsearch/issues/102)) |
 | `ParseTimeoutError` | Large/complex document exceeded parse timeout | In the default `setup()` flow, a timeout may be recovered automatically by the fallback parser for supported types; otherwise retry with a smaller file and inspect parser logs |
 | `ParseCorruptError` | Corrupt file or invalid parser output payload | In the default `setup()` flow, corruption may be recovered automatically by the fallback parser for supported types; if both parsers fail, the primary LiteParse error is raised |
-| `UnsupportedFileTypeError` | Extension not supported by the active parser backend | Convert to a supported format; fallback supports `.txt/.md/.html/.htm/.pdf/.docx`, LiteParse supports additional formats |
+| `UnsupportedFileTypeError` | Extension not supported by the active parser backend | Convert to a supported format: `.txt/.md/.html/.htm/.pdf/.docx` |
 | `NoDataFoundError` | File parsed but content was empty/whitespace only | Verify the source file contains readable text |
 
 More in the [Troubleshooting Guide](./docs/troubleshooting.md).

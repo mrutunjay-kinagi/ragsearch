@@ -136,8 +136,7 @@ If your data includes unstructured files (HTML, PDF, DOCX, TXT):
 from ragsearch import setup
 from pathlib import Path
 
-# Parser fallback chain: LiteParse -> fallback parsers
-# LiteParse used if available; fallback used otherwise
+# PDF, DOCX and HTML are parsed by the built-in parsers (pypdf, python-docx, beautifulsoup4)
 engine = setup(
     data_path=Path("path/to/your/report.pdf"),
     llm_api_key="your-cohere-api-key",

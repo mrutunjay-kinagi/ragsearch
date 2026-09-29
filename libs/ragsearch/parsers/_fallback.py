@@ -11,8 +11,15 @@ from ..errors import ParseCorruptError, ParserUnavailableError, UnsupportedFileT
 from ._models import ParsedDocument
 
 
+def _missing_dependency(package: str, file_kind: str) -> str:
+    return (
+        f"Cannot parse {file_kind} files: the '{package}' package is not installed. "
+        f"It is a ragsearch dependency, so the installation looks incomplete; run: pip install {package}"
+    )
+
+
 class FallbackParser:
-    """Python fallback parser used when LiteParse is unavailable."""
+    """Built-in pure-Python document parser (the default for unstructured files)."""
 
     SUPPORTED_SUFFIXES = {".txt", ".md", ".html", ".htm", ".pdf", ".docx"}
 
@@ -47,7 +54,7 @@ class FallbackParser:
             try:
                 from bs4 import BeautifulSoup
             except ImportError as exc:
-                raise ParserUnavailableError("Install beautifulsoup4 to parse HTML files", cause=exc) from exc
+                raise ParserUnavailableError(_missing_dependency("beautifulsoup4", "HTML"), cause=exc) from exc
 
             text = BeautifulSoup(path.read_text(encoding="utf-8"), "html.parser").get_text(" ", strip=True)
             if not text.strip():
@@ -64,7 +71,7 @@ class FallbackParser:
             try:
                 from pypdf import PdfReader
             except ImportError as exc:
-                raise ParserUnavailableError("Install pypdf to parse PDF files", cause=exc) from exc
+                raise ParserUnavailableError(_missing_dependency("pypdf", "PDF"), cause=exc) from exc
 
             try:
                 reader = PdfReader(str(path))
@@ -87,7 +94,7 @@ class FallbackParser:
             try:
                 import docx
             except ImportError as exc:
-                raise ParserUnavailableError("Install python-docx to parse DOCX files", cause=exc) from exc
+                raise ParserUnavailableError(_missing_dependency("python-docx", "DOCX"), cause=exc) from exc
 
             try:
                 document = docx.Document(str(path))
