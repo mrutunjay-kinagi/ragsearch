@@ -45,7 +45,7 @@ setup(
 | `reranker` | Reranker | None | Optional result reranker |
 | `observability_max_events` | int | 1000 | Max retained in-memory observability events |
 | `embedding_model_name` | str | None | Provider-specific embedding model name (Cohere default: `embed-v4.0`) |
-| `embedding_api_key` | str | None | Optional embedding-provider API key override |
+| `embedding_api_key` | str | None | Embedding-provider API key. Defaults to `llm_api_key` only when the providers match; required when they differ (except keyless `ollama` / `sentence_transformers`) |
 | `embedding_base_url` | str | None | Optional embedding-provider base URL |
 | `llm_model_name` | str | None | Provider-specific chat model name (Cohere default: `command-a-03-2025`) |
 | `llm_base_url` | str | None | Optional LLM base URL |

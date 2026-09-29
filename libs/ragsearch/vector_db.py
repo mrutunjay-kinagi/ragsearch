@@ -6,14 +6,11 @@ import faiss
 import numpy as np
 import logging
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
-
-
 import chromadb
 from chromadb.config import Settings
 from .errors import NoDataFoundError
+
+logger = logging.getLogger(__name__)
 
 class VectorDB:
     def __init__(self, embedding_dim: int = 1024):
@@ -32,7 +29,7 @@ class VectorDB:
         self.index = faiss.IndexFlatIP(embedding_dim)
         self.metadata_store = {}  # Dictionary to store metadata
         self.current_id = 0  # Incremental ID to track embeddings
-        logging.info(f"FAISS VectorDB initialized with dimension: {embedding_dim}")
+        logger.info(f"FAISS VectorDB initialized with dimension: {embedding_dim}")
 
     def insert(self, embedding: list, metadata: dict) -> None:
         """
@@ -92,10 +89,10 @@ class VectorDB:
                     metadata = self.metadata_store.get(idx, {})
                     results.append({"index": idx, "similarity": dist, "metadata": metadata})
 
-            logging.info(f"Search completed. Found {len(results)} results.")
+            logger.info(f"Search completed. Found {len(results)} results.")
             return results
         except Exception as e:
-            logging.error(f"Failed to search in vector database: {e}")
+            logger.error(f"Failed to search in vector database: {e}")
             raise
 
 

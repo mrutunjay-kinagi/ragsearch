@@ -38,6 +38,13 @@ class ParseCorruptError(ParsingError):
     """Raised when parser output or input data is invalid."""
 
 
+class EmbeddingProbeError(RagSearchError, RuntimeError):
+    """Raised when setup() cannot determine the embedding dimension from a probe embedding.
+
+    Subclasses RuntimeError so existing ``except RuntimeError`` handlers around setup() still catch it.
+    """
+
+
 class ModelNotFoundError(RagSearchError):
     """Raised when a provider rejects the configured model name as unknown or retired."""
 

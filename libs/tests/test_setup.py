@@ -9,6 +9,7 @@ import pandas as pd
 import pytest
 
 from libs.ragsearch.errors import (
+    EmbeddingProbeError,
     ModelNotFoundError,
     NoDataFoundError,
     ParseCorruptError,
@@ -81,6 +82,12 @@ def test_setup_structured_path_skips_parser(tmp_path, monkeypatch):
         def __init__(self, *args, **kwargs):
             pass
 
+        def embed(self, texts, **kwargs):
+            class Resp:
+                embeddings = [[0.1, 0.2, 0.3] for _ in texts]
+
+            return Resp()
+
     class DummyVectorDB:
         def __init__(self, *args, **kwargs):
             pass
@@ -108,6 +115,12 @@ def test_setup_unstructured_path_uses_parser(tmp_path, monkeypatch):
     class DummyCohereClient:
         def __init__(self, *args, **kwargs):
             pass
+
+        def embed(self, texts, **kwargs):
+            class Resp:
+                embeddings = [[0.1, 0.2, 0.3] for _ in texts]
+
+            return Resp()
 
     class DummyVectorDB:
         def __init__(self, *args, **kwargs):
@@ -164,6 +177,12 @@ def test_setup_unstructured_filters_whitespace_documents(tmp_path, monkeypatch):
     class DummyCohereClient:
         def __init__(self, *args, **kwargs):
             pass
+
+        def embed(self, texts, **kwargs):
+            class Resp:
+                embeddings = [[0.1, 0.2, 0.3] for _ in texts]
+
+            return Resp()
 
     class DummyVectorDB:
         def __init__(self, *args, **kwargs):
@@ -261,7 +280,7 @@ def test_setup_uses_embedding_dimension_from_model(tmp_path, monkeypatch):
     assert captured["embedding_dim"] == 3
 
 
-def test_setup_falls_back_to_legacy_dimension_when_probe_shape_is_invalid(tmp_path, monkeypatch):
+def test_setup_raises_clear_error_when_probe_shape_is_invalid(tmp_path, monkeypatch):
     data_path = tmp_path / "sample.csv"
     data_path.write_text("name,description\na,b\n", encoding="utf-8")
 
@@ -272,26 +291,21 @@ def test_setup_falls_back_to_legacy_dimension_when_probe_shape_is_invalid(tmp_pa
         def embed(self, texts, **kwargs):
             return object()
 
-    captured = {}
-
-    class CapturingVectorDB:
+    class FailIfBuiltVectorDB:
         def __init__(self, embedding_dim):
-            captured["embedding_dim"] = embedding_dim
-
-    class DummyEngine:
-        def __init__(self, *args, **kwargs):
-            pass
+            raise AssertionError("no vector index should be built with a guessed dimension")
 
     monkeypatch.setattr(ragsearch_setup_module, "CohereClient", DummyCohereClient)
-    monkeypatch.setattr(ragsearch_setup_module, "VectorDB", CapturingVectorDB)
-    monkeypatch.setattr(ragsearch_setup_module, "RagSearchEngine", DummyEngine)
+    monkeypatch.setattr(ragsearch_setup_module, "VectorDB", FailIfBuiltVectorDB)
 
-    setup(Path(data_path), llm_api_key="test-key")
+    with pytest.raises(EmbeddingProbeError, match="embedding dimension") as excinfo:
+        setup(Path(data_path), llm_api_key="test-key")
 
-    assert captured["embedding_dim"] == 4096
+    assert isinstance(excinfo.value, RuntimeError)
+    assert "cohere" in str(excinfo.value)
 
 
-def test_setup_falls_back_to_legacy_dimension_when_probe_runtime_fails(tmp_path, monkeypatch):
+def test_setup_raises_clear_error_when_probe_runtime_fails(tmp_path, monkeypatch):
     data_path = tmp_path / "sample.csv"
     data_path.write_text("name,description\na,b\n", encoding="utf-8")
 
@@ -302,23 +316,12 @@ def test_setup_falls_back_to_legacy_dimension_when_probe_runtime_fails(tmp_path,
         def embed(self, texts, **kwargs):
             raise RuntimeError("provider temporarily unavailable")
 
-    captured = {}
-
-    class CapturingVectorDB:
-        def __init__(self, embedding_dim):
-            captured["embedding_dim"] = embedding_dim
-
-    class DummyEngine:
-        def __init__(self, *args, **kwargs):
-            pass
-
     monkeypatch.setattr(ragsearch_setup_module, "CohereClient", DummyCohereClient)
-    monkeypatch.setattr(ragsearch_setup_module, "VectorDB", CapturingVectorDB)
-    monkeypatch.setattr(ragsearch_setup_module, "RagSearchEngine", DummyEngine)
 
-    setup(Path(data_path), llm_api_key="test-key")
+    with pytest.raises(EmbeddingProbeError, match="provider temporarily unavailable") as excinfo:
+        setup(Path(data_path), llm_api_key="test-key")
 
-    assert captured["embedding_dim"] == 4096
+    assert isinstance(excinfo.value.cause, RuntimeError)
 
 
 def test_setup_uses_configured_embedding_provider_factory(tmp_path, monkeypatch):
