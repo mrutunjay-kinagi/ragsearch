@@ -28,7 +28,7 @@ try:
     from cohere import Client as CohereClient
 except ImportError:
     CohereClient = None  # type: ignore[assignment,misc]
-from .errors import NoDataFoundError, ParsingError, RagSearchError
+from .errors import ModelNotFoundError, NoDataFoundError, ParsingError, RagSearchError
 from .embedding_models import create_embedding_model, infer_embedding_dimension
 from .llm_clients import create_llm_client
 from .parsers import FallbackParser, LiteParseAdapter, get_parser
@@ -307,6 +307,9 @@ def setup(data_path: Path,
     else:
         try:
             embedding_dim = infer_embedding_dimension(embedding_model)
+        except ModelNotFoundError:
+            # A wrong model name is a configuration error, not a transient probe failure.
+            raise
         except Exception as exc:
             # Preserve legacy fallback behavior when probe-time inference fails.
             logger.warning("Falling back to legacy embedding dimension 4096: %s", exc)

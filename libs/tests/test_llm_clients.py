@@ -8,8 +8,10 @@ from libs.ragsearch.llm_clients import (
     CohereLLMClientAdapter,
     OllamaLLMClientAdapter,
     OpenAILLMClientAdapter,
+    DEFAULT_COHERE_CHAT_MODEL,
     create_llm_client,
 )
+from libs.ragsearch.errors import ModelNotFoundError
 
 
 class _CohereClient:
@@ -71,3 +73,51 @@ def test_create_llm_client_supports_injected_cohere_client():
     model = create_llm_client(provider="cohere", cohere_client=_CohereClient())
 
     assert model.generate("hello") == "cohere answer"
+
+
+class _RecordingCohereChatClient:
+    def __init__(self):
+        self.calls = []
+
+    def chat(self, message, **kwargs):
+        self.calls.append({"message": message, **kwargs})
+        return SimpleNamespace(text="ok")
+
+
+class _CohereNotFoundError(Exception):
+    """Mimics cohere.errors.NotFoundError (an ApiError with status_code and body)."""
+
+    def __init__(self, message):
+        super().__init__(f"status_code: 404, body: {{'message': {message!r}}}")
+        self.status_code = 404
+        self.body = {"message": message}
+
+
+def test_cohere_adapter_sends_default_model():
+    client = _RecordingCohereChatClient()
+
+    create_llm_client(provider="cohere", cohere_client=client).generate("hello")
+
+    assert DEFAULT_COHERE_CHAT_MODEL == "command-a-03-2025"
+    assert client.calls == [{"message": "hello", "model": "command-a-03-2025"}]
+
+
+def test_create_llm_client_passes_cohere_model_name_through():
+    client = _RecordingCohereChatClient()
+
+    create_llm_client(provider="cohere", model="command-a-plus-05-2026", cohere_client=client).generate("hello")
+
+    assert client.calls[0]["model"] == "command-a-plus-05-2026"
+
+
+def test_cohere_adapter_names_parameter_when_model_removed():
+    class _RemovedModelClient:
+        def chat(self, message, **kwargs):
+            raise _CohereNotFoundError("model 'command-r' was removed on September 15, 2025.")
+
+    adapter = CohereLLMClientAdapter(_RemovedModelClient(), model="command-r")
+
+    with pytest.raises(ModelNotFoundError, match="llm_model_name") as excinfo:
+        adapter.generate("hello")
+
+    assert "command-r" in str(excinfo.value)

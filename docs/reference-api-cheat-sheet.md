@@ -44,10 +44,10 @@ setup(
 | `chunking_strategy` | ChunkingStrategy | None | Optional retrieval chunking strategy |
 | `reranker` | Reranker | None | Optional result reranker |
 | `observability_max_events` | int | 1000 | Max retained in-memory observability events |
-| `embedding_model_name` | str | None | Provider-specific embedding model name (ignored for Cohere, [#82](https://github.com/mrutunjay-kinagi/ragsearch/issues/82)) |
+| `embedding_model_name` | str | None | Provider-specific embedding model name (Cohere default: `embed-v4.0`) |
 | `embedding_api_key` | str | None | Optional embedding-provider API key override |
 | `embedding_base_url` | str | None | Optional embedding-provider base URL |
-| `llm_model_name` | str | None | Provider-specific chat model name (ignored for Cohere, [#82](https://github.com/mrutunjay-kinagi/ragsearch/issues/82)) |
+| `llm_model_name` | str | None | Provider-specific chat model name (Cohere default: `command-a-03-2025`) |
 | `llm_base_url` | str | None | Optional LLM base URL |
 
 **Returns:** Initialized `RagSearchEngine` ready for queries.
@@ -57,8 +57,6 @@ setup(
 - The parameter names above match the live public contract (`embedding_model_name`, `llm_model_name`, `embeddings_dir`).
 
 **Example – Cohere (default):**
-
-> The default Cohere setup currently fails because Cohere retired its fallback models ([#82](https://github.com/mrutunjay-kinagi/ragsearch/issues/82)). Until it is fixed, use the OpenAI example below. The local-embeddings example fixes `search()`, but `answer()` still uses Cohere for chat unless you also set `llm_provider="openai"` or `"ollama"`.
 
 ```python
 from pathlib import Path
