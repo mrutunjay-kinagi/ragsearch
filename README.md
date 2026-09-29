@@ -1,5 +1,7 @@
 # ragsearch
 
+[![CI](https://github.com/mrutunjay-kinagi/ragsearch/actions/workflows/ci.yml/badge.svg)](https://github.com/mrutunjay-kinagi/ragsearch/actions/workflows/ci.yml)
+
 `ragsearch` is a Python library for building Retrieval-Augmented Generation (RAG) applications that answer natural language questions over structured and unstructured data. It embeds your records, indexes them in a vector database (FAISS by default), retrieves the most relevant ones for a question, and asks an LLM for an answer grounded in those sources.
 
 > **Known issues:** a few features are still being fixed. See [Known limitations](./docs/troubleshooting.md#known-limitations) before you start.
@@ -384,6 +386,8 @@ Requires Python 3.10 or newer. If Poetry picks an older interpreter ("Current Py
 poetry install
 poetry run pytest
 ```
+
+The ChromaDB tests are skipped unless the extra is installed: `poetry install --extras chromadb`. CI (`.github/workflows/ci.yml`) runs the suite on Python 3.10–3.14, once more with the chromadb extra, builds the docs, and installs the built wheel into a clean environment to run the quickstart offline on a CSV, a PDF and a DOCX. It never calls real provider APIs.
 
 Changes are recorded in [CHANGELOG.md](./CHANGELOG.md).
 

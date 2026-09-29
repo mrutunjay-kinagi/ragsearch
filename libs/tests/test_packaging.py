@@ -34,9 +34,18 @@ def test_lock_has_no_python_39_only_resolutions():
     assert "python_version < '3.10'" not in LOCK
     names = re.findall(r'^\[\[package\]\]\nname = "([^"]+)"', LOCK, re.MULTILINE)
     duplicated = sorted({name for name in names if names.count(name) > 1})
-    assert duplicated == [], f"packages locked at several versions (Python-version splits?): {duplicated}"
+    # numpy is split on purpose (pyproject.toml): 2.2.x for Python 3.10, 2.3+ (with 3.14 wheels) for 3.11+.
+    assert duplicated in ([], ["numpy"]), f"unexpected packages locked at several versions: {duplicated}"
 
 
 def test_no_dependency_marker_mentions_python_39():
     settings = [line for line in PYPROJECT.splitlines() if not line.lstrip().startswith("#")]
     assert not [line for line in settings if ">=3.9" in line or "^3.9" in line]
+
+
+def test_numpy_split_gives_every_supported_python_a_release_with_wheels():
+    blocks = [block for block in LOCK.split("[[package]]")[1:] if re.search(r'^name = "numpy"$', block, re.MULTILINE)]
+    wheels = set()
+    for block in blocks:
+        wheels |= set(re.findall(r"-cp(3\d+)-", block))
+    assert {"310", "311", "312", "313", "314"} <= wheels, sorted(wheels)

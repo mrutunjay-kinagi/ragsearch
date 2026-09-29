@@ -51,6 +51,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- **Continuous integration on pull requests** (`.github/workflows/ci.yml`): the test suite on Python
+  3.10–3.14, once more with the chromadb extra, the docs build, and a clean install of the built
+  wheel that checks chromadb is not installed and runs the quickstart offline on a CSV, a PDF and a
+  DOCX. CI never calls real provider APIs. ([#127](https://github.com/mrutunjay-kinagi/ragsearch/pull/127), [#106](https://github.com/mrutunjay-kinagi/ragsearch/issues/106))
+
 - `MissingOptionalDependencyError` (a `RagSearchError` and `ImportError`), raised when a feature
   needs an optional extra that is not installed. ([#126](https://github.com/mrutunjay-kinagi/ragsearch/pull/126), [#125](https://github.com/mrutunjay-kinagi/ragsearch/issues/125))
 
@@ -81,6 +86,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   ([#90](https://github.com/mrutunjay-kinagi/ragsearch/pull/90))
 
 ### Changed
+
+- **`numpy` is now a declared dependency** (ragsearch already imported it): `>=2.2.6,<2.3` on
+  Python 3.10 and `>=2.3.3` on Python 3.11+, so every supported Python, including 3.14, gets a numpy
+  release with prebuilt wheels. ([#127](https://github.com/mrutunjay-kinagi/ragsearch/pull/127), [#106](https://github.com/mrutunjay-kinagi/ragsearch/issues/106))
 
 - **chromadb is now an optional extra: `pip install 'ragsearch[chromadb]'`.** The base install no
   longer includes it (47 instead of 101 packages, about 248 MB instead of 556 MB of site-packages),

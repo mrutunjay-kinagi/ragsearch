@@ -11,7 +11,11 @@ from pathlib import Path
 
 import pytest
 
-from libs.ragsearch.setup import setup
+# chromadb is an optional extra (#125): without it these tests would "xfail" for the wrong reason.
+# CI runs them in a job with `poetry install --extras chromadb`.
+pytest.importorskip("chromadb")
+
+from libs.ragsearch.setup import setup  # noqa: E402
 
 # Patch the module object: ``libs.ragsearch.setup`` as an attribute path is the setup() function (#91).
 ragsearch_setup_module = importlib.import_module("libs.ragsearch.setup")
