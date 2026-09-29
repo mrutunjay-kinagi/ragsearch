@@ -2,6 +2,7 @@
 Tests for empty-data handling in ragsearch.setup.
 """
 
+import importlib
 from pathlib import Path
 
 import pandas as pd
@@ -19,6 +20,9 @@ from libs.ragsearch.parsers._fallback import FallbackParser
 from libs.ragsearch.parsers._liteparse import LiteParseAdapter
 from libs.ragsearch.engine import RagSearchEngine
 from libs.ragsearch.setup import setup
+
+# Patch the module object: ``libs.ragsearch.setup`` as an attribute path is the setup() function (#91).
+ragsearch_setup_module = importlib.import_module("libs.ragsearch.setup")
 
 
 def test_no_data_found_is_ragsearch_error():
@@ -763,7 +767,7 @@ def test_setup_passes_cohere_model_names_to_client(tmp_path, monkeypatch):
 
             return Resp()
 
-    monkeypatch.setattr("libs.ragsearch.setup.CohereClient", DummyCohereClient)
+    monkeypatch.setattr(ragsearch_setup_module, "CohereClient", DummyCohereClient)
 
     engine = setup(
         Path(data_path),
@@ -793,7 +797,7 @@ def test_setup_raises_model_not_found_instead_of_falling_back(tmp_path, monkeypa
         def embed(self, texts, **kwargs):
             raise CohereNotFoundError()
 
-    monkeypatch.setattr("libs.ragsearch.setup.CohereClient", DummyCohereClient)
+    monkeypatch.setattr(ragsearch_setup_module, "CohereClient", DummyCohereClient)
 
     with pytest.raises(ModelNotFoundError, match="embedding_model_name"):
         setup(Path(data_path), llm_api_key="test-key", embedding_model_name="large")
