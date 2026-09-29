@@ -34,6 +34,8 @@ Then explore:
 
 ## Installation
 
+Requires Python 3.10 or newer.
+
 ```bash
 pip install ragsearch
 ```
@@ -367,6 +369,8 @@ More in the [Troubleshooting Guide](./docs/troubleshooting.md).
 - Empty or whitespace-only parsed documents are dropped before indexing.
 
 ## Development
+
+Requires Python 3.10 or newer. If Poetry picks an older interpreter ("Current Python version … is not allowed by the project"), point it at a supported one first, e.g. `poetry env use python3.11`.
 
 ```bash
 poetry install

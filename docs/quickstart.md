@@ -14,7 +14,7 @@ Sources:  [1] record 2: CLM-1003 | auto | denied | Windshield cracked by road de
 
 ## Prerequisites
 
-- Python 3.9+
+- Python 3.10+
 - A Cohere API key ([create one here](https://dashboard.cohere.com/api-keys)), exported as `COHERE_API_KEY`:
 
 ```bash

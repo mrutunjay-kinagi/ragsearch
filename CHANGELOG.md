@@ -79,6 +79,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- **Development dependencies refreshed** after dropping Python 3.9: the lock file was regenerated
+  (for example numpy 2.2, faiss-cpu 1.15, click 8.5, soupsieve 2.10), and pytest moves to 9.x.
+  Packages with known OSV advisories in the lock went from 11 to 1 (chromadb, which has no fixed
+  release yet). These are the tested versions; your own `pip install` resolves its own. ([#124](https://github.com/mrutunjay-kinagi/ragsearch/pull/124), [#105](https://github.com/mrutunjay-kinagi/ragsearch/issues/105))
+
 - **The web server listens on `127.0.0.1` by default.** `run()` used to bind `0.0.0.0` (every
   network interface) with no authentication, so anyone who could reach port 8080 could spend your
   API credits through `/answer` and read the indexed data. To serve other machines deliberately, call
@@ -134,6 +139,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - A wrong embedding model name is no longer masked by `setup()`'s fallback to a 4096-dimension
   index. It raises `ModelNotFoundError` instead.
   ([#90](https://github.com/mrutunjay-kinagi/ragsearch/pull/90))
+
+### Removed
+
+- **Python 3.9 support.** ragsearch now requires Python 3.10 or newer (`Requires-Python: >=3.10,<4.0`);
+  Python 3.9 reached end of life in October 2025. On Python 3.9, pip refuses to install this release
+  and keeps 0.1.x. ([#124](https://github.com/mrutunjay-kinagi/ragsearch/pull/124), [#105](https://github.com/mrutunjay-kinagi/ragsearch/issues/105))
 
 ### Deprecated
 
