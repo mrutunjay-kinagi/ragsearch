@@ -5,6 +5,7 @@ which is responsible for initializing the RAG Search Engine
 import logging
 import hashlib
 import copy
+import ipaddress
 import json
 import math
 from time import perf_counter
@@ -41,6 +42,16 @@ CHARS_PER_TOKEN = 3.5
 def estimate_tokens(text: str) -> int:
     """Approximate token count of ``text``, erring on the high side (no tokenizer dependency)."""
     return math.ceil(len(text) / CHARS_PER_TOKEN)
+
+
+def _is_loopback_host(host: str) -> bool:
+    """True for localhost and loopback addresses (127.0.0.0/8, ::1)."""
+    if host.strip().lower() == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host.strip("[]")).is_loopback
+    except ValueError:
+        return False
 
 
 class RagSearchEngine:
@@ -616,11 +627,29 @@ class RagSearchEngine:
             "context_tokens_estimate": estimate_tokens(context),
         }
 
-    def run(self):
+    def run(self, host: str = "127.0.0.1", port: int = 8080):
         """
-        Launches an interactive search interface where users can input queries and see results.
+        Launches the browser search interface and HTTP API (/query, /answer) in a background thread.
+
+        Args:
+            host: Interface to listen on. Defaults to 127.0.0.1 (this machine only). The server has
+                no authentication: binding another interface (e.g. "0.0.0.0") lets anyone who can
+                reach the port spend your LLM/embedding API credits and read the indexed data.
+            port: TCP port (default 8080).
+
+        This uses Flask's development server, which is meant for local use, not production.
         """
-        logging.info("Launching browser-based search interface...")
+        if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
+            raise ValueError(f"port must be an integer between 1 and 65535, got {port!r}")
+        if not _is_loopback_host(host):
+            logging.warning(
+                "Serving on %s:%s with no authentication: anyone who can reach this port can spend "
+                "your API credits and read the indexed data. Bind 127.0.0.1 unless you need network "
+                "access, and put an authenticating proxy in front if you do.",
+                host,
+                port,
+            )
+        logging.info("Launching browser-based search interface on http://%s:%s/ ...", host, port)
 
         # Initialize Flask app
         app = Flask(__name__, template_folder="templates")
@@ -669,4 +698,4 @@ class RagSearchEngine:
             return jsonify(self.answer(query, top_k=top_k))
 
         # Run the Flask app on a separate thread
-        threading.Thread(target=app.run, kwargs={"host": "0.0.0.0", "port": 8080, "use_reloader": False}).start()
+        threading.Thread(target=app.run, kwargs={"host": host, "port": port, "use_reloader": False}).start()

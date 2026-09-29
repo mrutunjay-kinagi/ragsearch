@@ -212,7 +212,7 @@ PYTHONPATH=samples/quickstart python -m ragsearch.evaluation \
 
 ## Web interface and HTTP API
 
-`run()` starts a Flask server on port 8080 in a background thread and returns immediately. In a script, keep the main thread alive, or requests fail once the script ends:
+`run()` starts a Flask server on `127.0.0.1:8080` (this machine only) in a background thread and returns immediately. Pass `host` and `port` to change them, e.g. `rag_engine.run(port=9000)`. In a script, keep the main thread alive, or requests fail once the script ends:
 
 ```python
 import threading
@@ -226,6 +226,8 @@ Then open http://localhost:8080/, enter a query, and click **Submit**.
 HTTP API:
 - `POST /query` returns search results. It returns metadata only by default; set `include_details=true` in the request JSON to also get `citation` and `similarity`.
 - `POST /answer` returns the same payload as `rag_engine.answer(...)`.
+
+> **Security:** the server has **no authentication**. Binding it to another interface, e.g. `rag_engine.run(host="0.0.0.0")`, lets anyone who can reach the port call `/answer` (spending your LLM and embedding API credits) and read your indexed data through `/query`, `/answer` and `/data-info`. `run()` logs a warning when you do this. Keep the default `127.0.0.1` unless you need network access, and then put an authenticating reverse proxy in front. `run()` uses Flask's development server, which Flask says not to use in production ([Flask docs](https://flask.palletsprojects.com/en/stable/deploying/)); production serving is planned in [#98](https://github.com/mrutunjay-kinagi/ragsearch/issues/98).
 
 ## Advanced usage
 
