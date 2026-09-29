@@ -35,6 +35,7 @@ Start with the :doc:`quickstart`; the project overview lives in the
    adr/ADR-0007-retrieval-quality-hooks
    adr/ADR-0008-observability-evaluation-baseline
    adr/ADR-0009-structured-aggregation-readonly-sql
+   adr/ADR-0010-default-chunking-and-context-budget
 
 
 Indices and tables

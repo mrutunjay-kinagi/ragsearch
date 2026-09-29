@@ -40,10 +40,10 @@ from .errors import (
 from .embedding_models import create_embedding_model, infer_embedding_dimension
 from .llm_clients import create_llm_client
 from .parsers import FallbackParser, LiteParseAdapter, get_parser
-from .chunking import ChunkingStrategy
+from .chunking import ChunkingStrategy, default_unstructured_chunking_strategy
 from .reranking import Reranker
 from .vector_db import VectorDB
-from .engine import RagSearchEngine
+from .engine import DEFAULT_MAX_CONTEXT_TOKENS, RagSearchEngine
 
 
 # File types loaded directly via pandas (no parser dispatch needed)
@@ -212,7 +212,8 @@ def setup(data_path: Path,
           embedding_base_url: Optional[str] = None,
           llm_provider: str = "cohere",
           llm_model_name: Optional[str] = None,
-          llm_base_url: Optional[str] = None):
+          llm_base_url: Optional[str] = None,
+          max_context_tokens: Optional[int] = DEFAULT_MAX_CONTEXT_TOKENS):
     """
     Initializes the RAG search engine from structured or unstructured data.
 
@@ -227,7 +228,9 @@ def setup(data_path: Path,
         chromadb_sqlite_path (str): Path to ChromaDB SQLite database (required if use_chromadb=True).
         chromadb_collection_name (str): ChromaDB collection name (required if use_chromadb=True).
         embeddings_dir (str): Optional directory for local embedding manifest/cache files.
-        chunking_strategy: Optional text chunking strategy for retrieval indexing.
+        chunking_strategy: Optional text chunking strategy for retrieval indexing. Defaults to
+            overlapping word windows for unstructured files (PDF, DOCX, HTML, text) and to one chunk
+            per row for structured files (CSV, JSON, Parquet).
         reranker: Optional result reranker applied after retrieval.
         observability_max_events (Optional[int]): Maximum in-memory observability events retained by engine.
         embedding_provider (str): Embedding provider identifier (default: "cohere").
@@ -239,6 +242,8 @@ def setup(data_path: Path,
         llm_provider (str): LLM provider identifier (default: "cohere").
         llm_model_name (str): Optional provider-specific chat model name.
         llm_base_url (str): Optional base URL for provider endpoints (for OpenAI-compatible or Ollama hosts).
+        max_context_tokens (Optional[int]): Cap on the estimated tokens of the sources answer() sends to
+            the LLM (default 3000); None disables the cap.
     Returns:
         RagSearchEngine: The initialized RAG search engine.
     Raises:
@@ -289,6 +294,10 @@ def setup(data_path: Path,
 
     if data.empty:
         raise NoDataFoundError(f"No data found in input file: {data_path}")
+
+    if chunking_strategy is None and data_path.suffix not in STRUCTURED_EXTENSIONS:
+        # One chunk per document would send whole documents to the LLM (#77).
+        chunking_strategy = default_unstructured_chunking_strategy()
 
     # Get file name for logging/engine initialization
     file_name = data_path.name
@@ -361,6 +370,7 @@ def setup(data_path: Path,
             chunking_strategy=chunking_strategy,
             reranker=reranker,
             observability_max_events=observability_max_events,
+            max_context_tokens=max_context_tokens,
             chromadb_sqlite_path=chromadb_sqlite_path,
             chromadb_collection_name=chromadb_collection_name
         )
@@ -392,6 +402,7 @@ def setup(data_path: Path,
             chunking_strategy=chunking_strategy,
             reranker=reranker,
             observability_max_events=observability_max_events,
+            max_context_tokens=max_context_tokens,
             file_name=file_name
         )
 

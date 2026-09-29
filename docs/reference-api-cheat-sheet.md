@@ -41,7 +41,8 @@ setup(
 | `llm_provider` | str | "cohere" | Options: "cohere", "openai", "ollama" |
 | `use_chromadb` | bool | False | Use ChromaDB instead of FAISS (`search()`/`answer()` currently fail in this mode, [#76](https://github.com/mrutunjay-kinagi/ragsearch/issues/76)) |
 | `embeddings_dir` | str | None | Directory for embedding manifests and cache files |
-| `chunking_strategy` | ChunkingStrategy | None | Optional retrieval chunking strategy |
+| `chunking_strategy` | ChunkingStrategy | None | Chunking strategy. Default: 150-word windows with 30-word overlap for unstructured files, one chunk per row for structured files |
+| `max_context_tokens` | int or None | 3000 | Cap on the estimated tokens of the sources `answer()` sends to the LLM; `None` disables it |
 | `reranker` | Reranker | None | Optional result reranker |
 | `observability_max_events` | int | 1000 | Max retained in-memory observability events |
 | `embedding_model_name` | str | None | Provider-specific embedding model name (Cohere default: `embed-v4.0`) |
@@ -151,11 +152,14 @@ Generate a grounded answer to a question using retrieved sources.
   "citations": [
     # ... citation objects only (see citation structure above)
   ],
-  "context": "[1] source_path: public:titanic.csv...\\n\\n[2]..."  # Numbered sources sent to the LLM
+  "context": "[1] source_path: public:titanic.csv...\\n\\n[2]...",  # Numbered sources sent to the LLM
+  "context_sources": 5,          # How many results were sent to the LLM
+  "context_truncated": False,    # True when sources were dropped or cut to fit max_context_tokens
+  "context_tokens_estimate": 1840
 }
 ```
 
-`context` contains the **full text** of each retrieved chunk, not the 200-char `excerpt`. When a `chunking_strategy` is used, that is the matched chunk rather than the whole source document. Prompt size grows with chunk size and `top_k`; there is no token budget yet ([#88](https://github.com/mrutunjay-kinagi/ragsearch/issues/88)).
+`context` contains the **full text** of each retrieved chunk, not the 200-char `excerpt`. For unstructured files (chunked by default) that is the matched chunk rather than the whole source document. Sources are added in score order up to `max_context_tokens` (default 3000; override per call with `answer(query, max_context_tokens=...)`), and `citations` lists only the sources that were sent.
 
 **Example:**
 ```python
