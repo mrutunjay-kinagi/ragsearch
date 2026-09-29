@@ -125,9 +125,9 @@ engine = setup(
 )
 ```
 
-### Warning: `Embedding cache ... does not match the current embedding model. Re-embedding all records.`
+### Warning: `Embedding cache ... does not match the current embedding model (...). One-time re-embedding of N records; later runs reuse the rebuilt cache.`
 
-This is expected, once, after you change `embedding_provider` or `embedding_model_name`, or after upgrading from ragsearch 0.1.5 or earlier. The cached vectors were produced by a different model (or one with a different vector dimension), so they are discarded and every record is embedded again. The cause is in the message and in `engine.ingestion_diagnostics["indexing"]["cache_invalidated_reason"]`. Later runs reuse the new cache as usual.
+This is expected, once, after you change `embedding_provider` or `embedding_model_name`, or after upgrading from ragsearch 0.1.5 or earlier. The cached vectors were produced by a different model (or one with a different vector dimension), so they are discarded and all N records are embedded again. The cause is in the message and in `engine.ingestion_diagnostics["indexing"]["cache_invalidated_reason"]`. Later runs reuse the new cache as usual.
 
 ### "No data found in the provided DataFrame"
 

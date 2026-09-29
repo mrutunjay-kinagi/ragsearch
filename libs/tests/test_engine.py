@@ -629,7 +629,9 @@ def test_upgrade_from_legacy_old_model_cache_reembeds_with_warning(tmp_path, cap
     assert engine.indexing_diagnostics["embedded_records"] == 2
     assert engine.indexing_diagnostics["reused_records"] == 0
     assert "no embedding model metadata" in engine.indexing_diagnostics["cache_invalidated_reason"]
-    assert any("Re-embedding" in record.getMessage() for record in caplog.records if record.levelno == logging.WARNING)
+    warnings = [record.getMessage() for record in caplog.records if record.levelno == logging.WARNING]
+    assert any("One-time re-embedding of 2 records" in message for message in warnings), warnings
+    assert any("later runs reuse the rebuilt cache" in message for message in warnings), warnings
     assert engine.search("alpha", top_k=1)
 
     saved = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -649,7 +651,11 @@ def test_cache_reembeds_when_model_changes_with_same_dimension(tmp_path, caplog)
     assert engine.indexing_diagnostics["reused_records"] == 0
     reason = engine.indexing_diagnostics["cache_invalidated_reason"]
     assert "embed-english-v3.0" in reason and "embed-multilingual-v3.0" in reason
-    assert any("Re-embedding" in record.getMessage() for record in caplog.records if record.levelno == logging.WARNING)
+    assert any(
+        "One-time re-embedding of 2 records" in record.getMessage()
+        for record in caplog.records
+        if record.levelno == logging.WARNING
+    )
 
 
 def test_cache_reembeds_when_dimension_changes(tmp_path):
@@ -672,4 +678,4 @@ def test_cache_reused_when_model_and_dimension_unchanged(tmp_path, caplog):
     assert new_model.call_sizes == []
     assert engine.indexing_diagnostics["reused_records"] == 2
     assert engine.indexing_diagnostics["cache_invalidated_reason"] == ""
-    assert not [record for record in caplog.records if "Re-embedding" in record.getMessage()]
+    assert not [record for record in caplog.records if "re-embedding" in record.getMessage()]

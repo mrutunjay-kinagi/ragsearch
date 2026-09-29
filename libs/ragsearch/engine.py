@@ -143,9 +143,10 @@ class RagSearchEngine:
         if cache_invalidated_reason:
             logging.warning(
                 "Embedding cache %s does not match the current embedding model (%s). "
-                "Re-embedding all records.",
+                "One-time re-embedding of %d records; later runs reuse the rebuilt cache.",
                 manifest_path,
                 cache_invalidated_reason,
+                len(self.index_data),
             )
             manifest["records"] = {}
         manifest["version"] = EMBEDDING_MANIFEST_VERSION
