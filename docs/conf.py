@@ -26,7 +26,7 @@ source_suffix = {
 }
 
 templates_path = ['_templates']
-# release-plan-*.md are internal planning documents, not part of the published docs.
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', 'release-plan-*.md']
+# release-*.md are internal release documents, not part of the published docs.
+exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', 'release-*.md']
 
 html_theme = 'sphinx_rtd_theme'

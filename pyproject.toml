@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "ragsearch"
-version = "0.1.5"
+version = "0.2.0rc1"
 description = "RAG over CSVs and documents, with citations, ingestion diagnostics, and a built-in evaluation harness."
 authors = ["Mrutunjay Kinagi <mrutunjay.kinagi@gmail.com>"]
 license = "MIT"
