@@ -87,6 +87,21 @@ jobs:
           poetry run sphinx-apidoc -o docs/source libs/ragsearch
           poetry run sphinx-build -b html docs/ docs/build
 
+  action-pins:
+    name: Workflow action pins
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: SHA-pinned actions are commits (and their Docker images exist)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python .github/ci/check_action_pins.py
+
   build:
     name: Build wheel
     runs-on: ubuntu-latest

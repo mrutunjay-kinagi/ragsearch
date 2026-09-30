@@ -86,8 +86,9 @@ jobs:
           name: dist
           path: dist
       - name: Publish package to TestPyPI
-        # pypa/gh-action-pypi-publish v1.14.2
-        uses: pypa/gh-action-pypi-publish@a892a5a61159132606e93a2fa6f4358831b04d26
+        # pypa/gh-action-pypi-publish v1.14.2 (the commit, not the annotated tag object; checked by
+        # .github/ci/check_action_pins.py in CI)
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33
         with:
           repository-url: https://test.pypi.org/legacy/
           password: ${{ secrets.TEST_PYPI_API_TOKEN }}
@@ -103,7 +104,8 @@ jobs:
           name: dist
           path: dist
       - name: Publish package to PyPI
-        # pypa/gh-action-pypi-publish v1.14.2
-        uses: pypa/gh-action-pypi-publish@a892a5a61159132606e93a2fa6f4358831b04d26
+        # pypa/gh-action-pypi-publish v1.14.2 (the commit, not the annotated tag object; checked by
+        # .github/ci/check_action_pins.py in CI)
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33
         with:
           password: ${{ secrets.PYPI_API_TOKEN }}
