@@ -10,6 +10,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- **Ollama embeddings work with the current `ollama` client.** `ollama.Client.embed()` returns a
+  typed `EmbedResponse` object rather than a dict, and the adapter only read dicts, so every
+  `embedding_provider="ollama"` setup failed with `EmbeddingProbeError`. The adapter now reads both
+  forms. Tests run the real `ollama` client and response types against a local stub server. ([#131](https://github.com/mrutunjay-kinagi/ragsearch/pull/131), [#129](https://github.com/mrutunjay-kinagi/ragsearch/issues/129))
+
 - **PDF, DOCX and HTML files work after a plain `pip install ragsearch`.** The parsers
   `pypdf` (>= 6.16.2), `python-docx` (>= 0.8.11) and `beautifulsoup4` (>= 4.9.0) are now regular
   dependencies. They used to be optional, and without them every PDF and DOCX failed. If one is

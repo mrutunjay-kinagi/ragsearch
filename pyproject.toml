@@ -58,6 +58,8 @@ beautifulsoup4 = ">=4.9.0"
 chromadb = ["chromadb"]
 
 [tool.poetry.group.dev.dependencies]
+# The real ollama client, so tests catch response-type drift in the Ollama adapters (#129).
+ollama = ">=0.4"
 # 9.0.3 fixes GHSA-6w46-j5rx-g56g (tmpdir handling); pytest 9 needs Python >= 3.10.
 pytest = "^9.0.3"
 pylint = "^3.3.1"
