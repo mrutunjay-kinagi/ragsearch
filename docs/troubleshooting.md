@@ -109,13 +109,9 @@ pip install sentence-transformers  # For local embeddings
 pip install ollama           # For Ollama
 ```
 
-### `NotFoundError: model 'large' not found` with the default Cohere provider
+### `ModelNotFoundError: Cohere embedding model '...' is not available`
 
-The Cohere adapters do not send a model name, and Cohere has retired the defaults it falls back to (`large` for embeddings, `command-r` for chat). `embedding_model_name` and `llm_model_name` are currently ignored for Cohere, so they cannot be used as a workaround. Until [#82](https://github.com/mrutunjay-kinagi/ragsearch/issues/82) is fixed, use another provider:
-
-```bash
-pip install openai
-```
+The provider does not recognise the configured model name, or has retired it. The message names the parameter to change: `embedding_model_name` for embeddings, `llm_model_name` for chat. Pick a current model from [Cohere's model list](https://docs.cohere.com/docs/models):
 
 ```python
 from pathlib import Path
@@ -123,11 +119,39 @@ from ragsearch import setup
 
 engine = setup(
     Path("data.csv"),
-    llm_api_key="sk-...",
-    embedding_provider="openai",
-    llm_provider="openai",
+    llm_api_key="your-cohere-key",
+    embedding_model_name="embed-v4.0",
+    llm_model_name="command-a-03-2025",
 )
 ```
+
+### Warning: `Embedding cache ... does not match the current embedding model (...). One-time re-embedding of N records; later runs reuse the rebuilt cache.`
+
+This is expected, once, after you change `embedding_provider` or `embedding_model_name`, or after upgrading from ragsearch 0.1.5 or earlier. The cached vectors were produced by a different model (or one with a different vector dimension), so they are discarded and all N records are embedded again. The cause is in the message and in `engine.ingestion_diagnostics["indexing"]["cache_invalidated_reason"]`. Later runs reuse the new cache as usual.
+
+### `EmbeddingProbeError: Could not determine the embedding dimension`
+
+`setup()` embeds one probe text to learn the vector dimension before building the index. The message says which provider failed and why (for example an authentication or network error, or a custom model returning the wrong shape). Fix the cause and call `setup()` again. Earlier versions silently fell back to dimension 4096 here and failed later with `AssertionError: d == self.d`.
+
+### `ValueError: embedding_provider '...' differs from llm_provider '...'`
+
+The embedding and LLM providers differ and no `embedding_api_key` was given. `setup()` refuses to send one provider's API key to another. Pass the embedding provider's own key:
+
+```python
+from pathlib import Path
+from ragsearch import setup
+
+engine = setup(
+    Path("data.csv"),
+    llm_api_key="your-openai-key",
+    llm_provider="openai",
+    embedding_api_key="your-cohere-key",  # Cohere is the default embedding provider
+)
+```
+
+### `MissingOptionalDependencyError: ChromaDB mode needs the optional 'chromadb' extra`
+
+ChromaDB is an optional extra since 0.2.0. Install it with `pip install 'ragsearch[chromadb]'`, or use the default FAISS backend (ChromaDB mode is currently broken anyway, [#76](https://github.com/mrutunjay-kinagi/ragsearch/issues/76)).
 
 ### "No data found in the provided DataFrame"
 
@@ -192,11 +216,8 @@ for result in summary['results']:
 2. **Source accuracy** depends on embedding model; always verify manually
 3. **Benchmark artifacts** in `.benchmarks/` are produced by the benchmark runner scripts, not by search calls
 4. **ChromaDB mode:** `search()` and `answer()` currently fail when `use_chromadb=True`; use the default FAISS backend ([#76](https://github.com/mrutunjay-kinagi/ragsearch/issues/76))
-5. **Default Cohere models retired:** see the Setup Failures entry above ([#82](https://github.com/mrutunjay-kinagi/ragsearch/issues/82))
-6. **One chunk per document by default:** unstructured files are indexed as a single chunk unless you pass a `chunking_strategy` ([#77](https://github.com/mrutunjay-kinagi/ragsearch/issues/77))
-7. **Numeric columns** in CSV/JSON/Parquet are not included in the indexed text ([#78](https://github.com/mrutunjay-kinagi/ragsearch/issues/78))
-8. **Parsing gaps (built-in fallback parser, used when Node.js/LiteParse is not available):** DOCX tables are skipped and scanned PDFs (no text layer) yield no text, since there is no OCR ([#83](https://github.com/mrutunjay-kinagi/ragsearch/issues/83))
-9. **No prompt token budget:** `answer()` sends the full text of every retrieved chunk; very large chunks or a high `top_k` can exceed the model's context window ([#88](https://github.com/mrutunjay-kinagi/ragsearch/issues/88))
+5. **Numeric columns** in CSV/JSON/Parquet are not included in the indexed text ([#78](https://github.com/mrutunjay-kinagi/ragsearch/issues/78))
+6. **Parsing gaps (built-in parser):** DOCX tables are skipped and scanned PDFs (no text layer) yield no text, since there is no OCR ([#83](https://github.com/mrutunjay-kinagi/ragsearch/issues/83))
 
 ---
 

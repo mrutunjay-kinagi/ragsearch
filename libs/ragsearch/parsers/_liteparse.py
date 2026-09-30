@@ -16,9 +16,18 @@ from ._models import ParsedDocument
 
 
 class LiteParseAdapter:
-    """Adapter around the LiteParse CLI."""
+    """Adapter around a LiteParse-compatible CLI, used only when RAGSEARCH_LITEPARSE_CLI is set.
+
+    The CLI must accept ``<cli> --json <file>`` and print ``{"documents": [...]}`` or ``{"text": ...}``.
+    The official LiteParse CLI (npm ``@llamaindex/liteparse``, ``lit parse <file> --format json``)
+    has a different interface, so it is not used automatically (see issue #100).
+    """
 
     ENV_CLI_PATH = "RAGSEARCH_LITEPARSE_CLI"
+    UNAVAILABLE_MESSAGE = (
+        "LiteParse CLI not found: automatic LiteParse support is currently unavailable (#100). "
+        "Set RAGSEARCH_LITEPARSE_CLI to a compatible CLI, or rely on the built-in fallback parsers."
+    )
 
     SUPPORTED_SUFFIXES = {".pdf", ".docx", ".doc", ".html", ".htm", ".md", ".txt", ".png", ".jpg", ".jpeg"}
 
@@ -27,18 +36,18 @@ class LiteParseAdapter:
 
     @classmethod
     def available(cls) -> bool:
-        """Return True when the required Node executables are available."""
+        """Return True only when a compatible CLI is configured through RAGSEARCH_LITEPARSE_CLI."""
 
         cli_path = os.environ.get(cls.ENV_CLI_PATH)
         if cli_path:
             return bool(shutil.which(cli_path) or Path(cli_path).exists())
-        return bool(shutil.which("node") and shutil.which("npx"))
+        return False
 
     def _build_command(self, path: Path) -> list[str]:
         cli_path = os.environ.get(self.ENV_CLI_PATH)
-        if cli_path:
-            return [cli_path, "--json", str(path)]
-        return ["npx", "--no-install", "@run-llama/liteparse", "--json", str(path)]
+        if not cli_path:
+            raise ParserUnavailableError(self.UNAVAILABLE_MESSAGE)
+        return [cli_path, "--json", str(path)]
 
     def supports(self, path: Path | str) -> bool:
         path = Path(path) if not isinstance(path, Path) else path
@@ -50,7 +59,7 @@ class LiteParseAdapter:
         if not isinstance(path, Path):
             path = Path(path)
         if not self.available():
-            raise ParserUnavailableError("LiteParse CLI not found; install Node.js 18+ and npx")
+            raise ParserUnavailableError(self.UNAVAILABLE_MESSAGE)
         if not path.exists():
             raise ParseCorruptError(f"Input path is missing or unreadable: {path}")
         if not self.supports(path):

@@ -1,0 +1,202 @@
+# Changelog
+
+All notable changes to ragsearch are documented here. Each pull request adds its own entry under
+**Unreleased**; the section is renamed to the version number when a release is cut.
+
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
+[Semantic Versioning](https://semver.org/).
+
+## [Unreleased]
+
+## [0.2.0] - 2026-09-30
+
+"It works": `pip install ragsearch` in a fresh environment and the README examples run, including on
+multi-page PDFs. Highlights: working default Cohere models; `from ragsearch import setup` returns
+the function; PDF, DOCX and HTML parsing out of the box; unstructured files chunked by default with
+a context budget in `answer()`; API keys kept per provider; the web server bound to localhost;
+Python 3.10–3.14; chromadb optional; CI on every pull request.
+
+### Fixed
+
+- **Ollama embeddings work with the current `ollama` client.** `ollama.Client.embed()` returns a
+  typed `EmbedResponse` object rather than a dict, and the adapter only read dicts, so every
+  `embedding_provider="ollama"` setup failed with `EmbeddingProbeError`. The adapter now reads both
+  forms. Tests run the real `ollama` client and response types against a local stub server. ([#131](https://github.com/mrutunjay-kinagi/ragsearch/pull/131), [#129](https://github.com/mrutunjay-kinagi/ragsearch/issues/129))
+
+- **PDF, DOCX and HTML files work after a plain `pip install ragsearch`.** The parsers
+  `pypdf` (>= 6.16.2), `python-docx` (>= 0.8.11) and `beautifulsoup4` (>= 4.9.0) are now regular
+  dependencies. They used to be optional, and without them every PDF and DOCX failed. If one is
+  missing at runtime anyway, the error names the `pip install` command. ([#103](https://github.com/mrutunjay-kinagi/ragsearch/pull/103), [#100](https://github.com/mrutunjay-kinagi/ragsearch/issues/100))
+- **No more failed LiteParse call before every document.** ragsearch invoked
+  `npx --no-install @run-llama/liteparse`, a package that does not exist on npm, whenever
+  Node.js was installed. That cost about 1.4 s per file before falling back, and broke `.doc` and
+  image files with an npm 404. ([#103](https://github.com/mrutunjay-kinagi/ragsearch/pull/103), [#100](https://github.com/mrutunjay-kinagi/ragsearch/issues/100))
+
+- **API keys are no longer sent to the wrong provider.** `embedding_api_key` defaulted to
+  `llm_api_key` even when the two providers differed, so, for example, an OpenAI key was sent to
+  Cohere. Separately, Cohere embeddings always used `llm_api_key` and ignored `embedding_api_key`, so
+  an OpenAI LLM with Cohere embeddings could not work. Each provider now gets its own key, and
+  mixed providers work. ([#101](https://github.com/mrutunjay-kinagi/ragsearch/pull/101))
+- **Importing ragsearch no longer configures the root logger.** `ragsearch.vector_db` called
+  `logging.basicConfig(level=INFO)` at import time, overriding the host application's logging
+  setup. It now logs through a module-level logger. ([#101](https://github.com/mrutunjay-kinagi/ragsearch/pull/101))
+
+- **Default Cohere setup works again.** The Cohere adapters now send an explicit model:
+  `embed-v4.0` for embeddings and `command-a-03-2025` for chat. Before, Cohere fell back to its
+  retired `large` embedding model and every default `setup()` failed. `embedding_model_name` and
+  `llm_model_name` are now passed through to Cohere instead of being ignored. Embed requests send
+  `input_type="search_document"`, which Cohere's v3+ embedding models require.
+  ([#82](https://github.com/mrutunjay-kinagi/ragsearch/issues/82),
+  [#90](https://github.com/mrutunjay-kinagi/ragsearch/pull/90))
+- **`from ragsearch import setup` returns the `setup()` function.** It returned the
+  `ragsearch.setup` module, so every README example failed with
+  `TypeError: 'module' object is not callable`. `from ragsearch import RagSearchEngine` is also
+  reliable regardless of import order.
+  ([#91](https://github.com/mrutunjay-kinagi/ragsearch/issues/91),
+  [#93](https://github.com/mrutunjay-kinagi/ragsearch/pull/93))
+- **Embedding cache no longer reuses vectors from a different model.** The cache manifest (now
+  schema version 2) records the embedding model and vector dimension. When either changes, or the
+  cache predates this release, `setup()` logs a warning and re-embeds every record. Before, it
+  failed with an empty `Embedding indexing failed` error, or with a same-dimension model it
+  silently mixed vectors from two models. The reason is reported in
+  `ingestion_diagnostics["indexing"]["cache_invalidated_reason"]`.
+  ([#95](https://github.com/mrutunjay-kinagi/ragsearch/pull/95))
+
+### Added
+
+- **Continuous integration on pull requests** (`.github/workflows/ci.yml`): the test suite on Python
+  3.10–3.14, once more with the chromadb extra, the docs build, and a clean install of the built
+  wheel that checks chromadb is not installed and runs the quickstart offline on a CSV, a PDF and a
+  DOCX. CI never calls real provider APIs. ([#127](https://github.com/mrutunjay-kinagi/ragsearch/pull/127), [#106](https://github.com/mrutunjay-kinagi/ragsearch/issues/106))
+
+- `MissingOptionalDependencyError` (a `RagSearchError` and `ImportError`), raised when a feature
+  needs an optional extra that is not installed. ([#126](https://github.com/mrutunjay-kinagi/ragsearch/pull/126), [#125](https://github.com/mrutunjay-kinagi/ragsearch/issues/125))
+
+- `run(host="127.0.0.1", port=8080)`: the web server's host and port are now parameters; an
+  invalid port raises `ValueError`. ([#122](https://github.com/mrutunjay-kinagi/ragsearch/pull/122), [#104](https://github.com/mrutunjay-kinagi/ragsearch/issues/104))
+
+- **Answer context budget.** `answer()` adds retrieved sources in score order up to
+  `max_context_tokens` estimated tokens (default 3000; set it on `setup()` or per `answer()` call,
+  `None` disables it). The response gains `context_sources`, `context_truncated` and
+  `context_tokens_estimate`. `FixedWordChunkingStrategy` gains `overlap_words`. ([#118](https://github.com/mrutunjay-kinagi/ragsearch/pull/118), [#77](https://github.com/mrutunjay-kinagi/ragsearch/issues/77), [#88](https://github.com/mrutunjay-kinagi/ragsearch/issues/88))
+
+- `EmbeddingProbeError` (a `RagSearchError` and `RuntimeError`), raised when `setup()` cannot
+  determine the embedding dimension. ([#101](https://github.com/mrutunjay-kinagi/ragsearch/pull/101))
+
+- **A quickstart that uses the real API.** `docs/quickstart.md` now runs the real
+  `setup()` / `answer()` path on a small insurance-claims sample. It needs only
+  `pip install ragsearch` and a Cohere key, and no longer depends on demo embedding and LLM
+  stand-ins or a repository checkout. The samples ship in `samples/quickstart/` (claims CSV, a
+  claim letter, evaluation cases and an engine factory for the evaluation CLI). The demo
+  stand-ins moved to test fixtures, and a test runs the quickstart script offline.
+  ([#99](https://github.com/mrutunjay-kinagi/ragsearch/pull/99))
+- README section on **OpenAI-compatible endpoints** (LM Studio, vLLM, gateways) via
+  `llm_provider="openai"` + `llm_base_url` and `embedding_provider="openai"` +
+  `embedding_base_url`. ([#99](https://github.com/mrutunjay-kinagi/ragsearch/pull/99))
+
+- `ModelNotFoundError` (a `RagSearchError`), raised when a provider reports an unknown or retired
+  model. The message names the parameter to change (`embedding_model_name` or `llm_model_name`).
+  ([#90](https://github.com/mrutunjay-kinagi/ragsearch/pull/90))
+
+### Changed
+
+- **Package metadata and docs describe what 0.2.0 does.** New one-line PyPI description; the author
+  email is fixed; project URLs (documentation, changelog, issues), keywords and classifiers (Alpha,
+  Python 3.10–3.14) are added. The README gains notes on whole-document questions (raise `top_k`),
+  on a fully local Ollama setup (a placeholder `llm_api_key` is still required, #79), and on Python
+  support for the chromadb extra. ADR-0009 is accepted. The cookbook and notebook carry a note that
+  they predate 0.2.0 and are being rewritten (#112). ([#130](https://github.com/mrutunjay-kinagi/ragsearch/pull/130), [#108](https://github.com/mrutunjay-kinagi/ragsearch/issues/108))
+
+- **Release workflow hardened (maintainers).** Publishing runs only from a GitHub Release (the
+  manual trigger is removed). The release tag must equal `v` + the `pyproject.toml` version, and the
+  tagged commit must be on `master`, or on `develop`/`master` for candidates. Pre-releases with
+  candidate versions (`X.Y.Z{a,b,rc}N`) publish to TestPyPI; final versions publish to PyPI.
+  Poetry is pinned to 1.8.3, and `pypa/gh-action-pypi-publish` moves from v1.4.2 to v1.14.2
+  (pinned by commit `dc37677`; 0.2.0rc1 was pinned to the annotated tag object instead and failed to
+  upload, so CI now checks that every SHA-pinned action is a commit, [#133](https://github.com/mrutunjay-kinagi/ragsearch/pull/133)). ([#128](https://github.com/mrutunjay-kinagi/ragsearch/pull/128), [#107](https://github.com/mrutunjay-kinagi/ragsearch/issues/107))
+
+- **`numpy` is now a declared dependency** (ragsearch already imported it): `>=2.2.6,<2.3` on
+  Python 3.10 and `>=2.3.3` on Python 3.11+, so every supported Python, including 3.14, gets a numpy
+  release with prebuilt wheels. ([#127](https://github.com/mrutunjay-kinagi/ragsearch/pull/127), [#106](https://github.com/mrutunjay-kinagi/ragsearch/issues/106))
+
+- **chromadb is now an optional extra: `pip install 'ragsearch[chromadb]'`.** The base install no
+  longer includes it (47 instead of 101 packages, about 248 MB instead of 556 MB of site-packages),
+  and `from ragsearch import setup` is faster (about 420 ms instead of 660 ms). chromadb releases up to
+  1.5.9 carry unpatched upstream advisories (GHSA-f4j7-r4q5-qw2c / CVE-2026-45829,
+  GHSA-36p7-vc44-83pf, GHSA-2wm9-hf6c-p5cr). They affect Chroma's server, not the embedded client
+  ragsearch uses, but security scanners flag every environment that installs it. If you use
+  `use_chromadb=True`, install the extra; without it, `setup()` raises
+  `MissingOptionalDependencyError` with the install command. ([#126](https://github.com/mrutunjay-kinagi/ragsearch/pull/126), [#125](https://github.com/mrutunjay-kinagi/ragsearch/issues/125))
+
+- **Development dependencies refreshed** after dropping Python 3.9: the lock file was regenerated
+  (for example numpy 2.2, faiss-cpu 1.15, click 8.5, soupsieve 2.10), and pytest moves to 9.x.
+  Packages with known OSV advisories in the lock went from 11 to 1 (chromadb, which has no fixed
+  release yet). These are the tested versions; your own `pip install` resolves its own. ([#124](https://github.com/mrutunjay-kinagi/ragsearch/pull/124), [#105](https://github.com/mrutunjay-kinagi/ragsearch/issues/105))
+
+- **The web server listens on `127.0.0.1` by default.** `run()` used to bind `0.0.0.0` (every
+  network interface) with no authentication, so anyone who could reach port 8080 could spend your
+  API credits through `/answer` and read the indexed data. To serve other machines deliberately, call
+  `run(host="0.0.0.0")` (ideally behind an authenticating reverse proxy); `run()` then logs a
+  warning. ([#122](https://github.com/mrutunjay-kinagi/ragsearch/pull/122), [#104](https://github.com/mrutunjay-kinagi/ragsearch/issues/104))
+
+- **Unstructured files are chunked by default.** PDF, DOCX, HTML, Markdown and text files are
+  split into 150-word windows with 30 words of overlap, instead of one chunk per file. That used to
+  send whole documents to the LLM: about 57,700 estimated tokens per question for an 80-page PDF.
+  Structured files keep one chunk per row. The chunking settings are part of the embedding-cache
+  identity (manifest schema v3), so the first `setup()` after upgrading re-embeds cached
+  unstructured files once, with a warning. Pass `chunking_strategy=RowChunkingStrategy()` to keep
+  the old behaviour. ([#118](https://github.com/mrutunjay-kinagi/ragsearch/pull/118), [#77](https://github.com/mrutunjay-kinagi/ragsearch/issues/77), [#88](https://github.com/mrutunjay-kinagi/ragsearch/issues/88))
+- **`answer()["citations"]` lists only the sources sent to the LLM.** When the context budget
+  leaves sources out, they stay in `results` but not in `citations`, so citation numbers always
+  match the `[n]` markers in the answer. ([#118](https://github.com/mrutunjay-kinagi/ragsearch/pull/118), [#77](https://github.com/mrutunjay-kinagi/ragsearch/issues/77), [#88](https://github.com/mrutunjay-kinagi/ragsearch/issues/88))
+
+- **LiteParse is no longer used automatically.** The official LiteParse CLI
+  (`@llamaindex/liteparse`) has a different interface from the one ragsearch expects, so support is
+  deferred to [#102](https://github.com/mrutunjay-kinagi/ragsearch/issues/102). ragsearch uses a
+  LiteParse-compatible CLI only when `RAGSEARCH_LITEPARSE_CLI` is set. `.doc`, `.png` and `.jpg`
+  files are therefore unsupported by default. The README no longer tells users to run
+  `npx --yes @run-llama/liteparse`, which would have downloaded and executed whatever gets
+  published under that unclaimed name. ([#103](https://github.com/mrutunjay-kinagi/ragsearch/pull/103), [#100](https://github.com/mrutunjay-kinagi/ragsearch/issues/100))
+
+- **`setup()` fails fast when the embedding-dimension probe fails.** It used to log a warning
+  and fall back to dimension 4096, which only suited Cohere's retired `large` model and otherwise
+  failed later with `AssertionError: d == self.d`. It now raises `EmbeddingProbeError` naming the
+  provider and the cause. ([#101](https://github.com/mrutunjay-kinagi/ragsearch/pull/101))
+- **`embedding_api_key` is required when the embedding and LLM providers differ** (except for the
+  keyless `ollama` and `sentence_transformers` embedding providers). `setup()` raises a
+  `ValueError` instead of sending `llm_api_key` to a different provider. Same-provider setups
+  (such as the Cohere default) keep defaulting to `llm_api_key`. ([#101](https://github.com/mrutunjay-kinagi/ragsearch/pull/101))
+- **ragsearch no longer prints INFO logs by default.** Applications that want them should
+  configure logging themselves, for example `logging.basicConfig(level=logging.INFO)`. ([#101](https://github.com/mrutunjay-kinagi/ragsearch/pull/101))
+
+- **README rewritten so every example runs as written** (given a key). It adds a "what makes
+  ragsearch different" summary, a known-issues link, a short sample-data excerpt instead of the raw
+  recipe CSV, a clear "currently broken" label on the ChromaDB example (#76), and no internal
+  jargon. `README.rst` is removed; `README.md` is the only README and the package long
+  description. The Sphinx landing page no longer embeds the README.
+  ([#99](https://github.com/mrutunjay-kinagi/ragsearch/pull/99))
+
+- **Upgrading re-embeds existing caches once.** Caches written by 0.1.5 or earlier carry no model
+  metadata, so the first `setup()` after upgrading re-embeds them (one embedding API pass per
+  data file). ([#95](https://github.com/mrutunjay-kinagi/ragsearch/pull/95))
+- **`ragsearch.setup` as an attribute is now the `setup()` function, not the module.** As a
+  result, `import ragsearch.setup as m` binds the function, and pytest's string-form
+  `monkeypatch.setattr("ragsearch.setup.X", ...)` fails with `AttributeError`. To reach the
+  module, use `unittest.mock.patch("ragsearch.setup.X")` or
+  `importlib.import_module("ragsearch.setup")`. `from ragsearch.setup import setup` is unchanged.
+  ([#93](https://github.com/mrutunjay-kinagi/ragsearch/pull/93))
+- A wrong embedding model name is no longer masked by `setup()`'s fallback to a 4096-dimension
+  index. It raises `ModelNotFoundError` instead.
+  ([#90](https://github.com/mrutunjay-kinagi/ragsearch/pull/90))
+
+### Removed
+
+- **Python 3.9 support.** ragsearch now requires Python 3.10 or newer (`Requires-Python: >=3.10,<4.0`);
+  Python 3.9 reached end of life in October 2025. On Python 3.9, pip refuses to install this release
+  and keeps 0.1.x. ([#124](https://github.com/mrutunjay-kinagi/ragsearch/pull/124), [#105](https://github.com/mrutunjay-kinagi/ragsearch/issues/105))
+
+### Deprecated
+
+- Reusing `llm_api_key` for the embedding provider when `llm_provider` needs no key (`ollama`)
+  and `embedding_api_key` is not given. It still works, but emits a `DeprecationWarning`. Pass
+  `embedding_api_key` instead; the fallback will be removed in a future release. ([#101](https://github.com/mrutunjay-kinagi/ragsearch/pull/101))

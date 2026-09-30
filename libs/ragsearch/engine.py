@@ -5,14 +5,16 @@ which is responsible for initializing the RAG Search Engine
 import logging
 import hashlib
 import copy
+import ipaddress
 import json
+import math
 from time import perf_counter
 from typing import Any, Dict, List, Optional
 import pandas as pd
 from .errors import NoDataFoundError
-from .embedding_models import EmbeddingModel, extract_embeddings
+from .embedding_models import EmbeddingModel, describe_embedding_model, extract_embeddings
 from .llm_clients import LLMClient
-from .chunking import ChunkingStrategy, RowChunkingStrategy
+from .chunking import ChunkingStrategy, RowChunkingStrategy, describe_chunking_strategy
 from .reranking import NoOpReranker, Reranker
 from .utils import (extract_textual_columns,
                     preprocess_search_text,
@@ -24,6 +26,33 @@ from .vector_backends import VectorBackend
 from flask import Flask, request, jsonify, render_template
 import threading
 from pathlib import Path
+
+# v2 adds the embedding model identity and dimension the cached vectors were produced with;
+# v3 adds the chunking strategy and its settings.
+EMBEDDING_MANIFEST_VERSION = 3
+
+# Default cap on the estimated tokens of the numbered sources that answer() sends to the LLM.
+DEFAULT_MAX_CONTEXT_TOKENS = 3000
+
+# Characters per token used by estimate_tokens(). Measured with Cohere's tokenizer on the claim
+# documents and an 80-page NIST PDF at 3.55-4.87 (4.27 overall), so 3.5 errs on the high side.
+CHARS_PER_TOKEN = 3.5
+
+
+def estimate_tokens(text: str) -> int:
+    """Approximate token count of ``text``, erring on the high side (no tokenizer dependency)."""
+    return math.ceil(len(text) / CHARS_PER_TOKEN)
+
+
+def _is_loopback_host(host: str) -> bool:
+    """True for localhost and loopback addresses (127.0.0.0/8, ::1)."""
+    if host.strip().lower() == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host.strip("[]")).is_loopback
+    except ValueError:
+        return False
+
 
 class RagSearchEngine:
     @staticmethod
@@ -54,7 +83,8 @@ class RagSearchEngine:
                  reranker: Optional[Reranker] = None,
                  observability_max_events: Optional[int] = 1000,
                  chromadb_sqlite_path: str = None,
-                 chromadb_collection_name: str = None):
+                 chromadb_collection_name: str = None,
+                 max_context_tokens: Optional[int] = DEFAULT_MAX_CONTEXT_TOKENS):
         """
         Initializes the RAG Search Engine with data, an LLM client, and a vector database.
 
@@ -75,6 +105,10 @@ class RagSearchEngine:
         self.save_dir = Path(save_dir)
         self.file_name = file_name
         self.chunking_strategy = chunking_strategy or RowChunkingStrategy()
+        self.chunking_id = describe_chunking_strategy(self.chunking_strategy)
+        if max_context_tokens is not None and max_context_tokens <= 0:
+            raise ValueError("max_context_tokens must be > 0 when provided")
+        self.max_context_tokens = max_context_tokens
         self.reranker = reranker or NoOpReranker()
         if observability_max_events is not None and observability_max_events <= 0:
             raise ValueError("observability_max_events must be > 0 when provided")
@@ -83,14 +117,16 @@ class RagSearchEngine:
         self.chromadb_collection_name = chromadb_collection_name
         self.index_data = data
         self.observability_events: List[Dict[str, Any]] = []
+        self.embedding_model_id = describe_embedding_model(embedding_model)
         self.indexing_diagnostics = {
-            "manifest_version": 1,
+            "manifest_version": EMBEDDING_MANIFEST_VERSION,
             "manifest_path": "",
             "total_records": 0,
             "embedded_records": 0,
             "reused_records": 0,
             "new_records": 0,
             "changed_records": 0,
+            "cache_invalidated_reason": "",
         }
 
         if self.data.empty:
@@ -132,6 +168,21 @@ class RagSearchEngine:
         """
         manifest_path = self.save_dir / f"{self.file_name}.embedding_manifest.json"
         manifest = self._load_embedding_manifest(manifest_path)
+        expected_dim = getattr(self.vector_db, "embedding_dim", None)
+        cache_invalidated_reason = self._embedding_cache_mismatch(manifest, expected_dim)
+        if cache_invalidated_reason:
+            logging.warning(
+                "Embedding cache %s does not match the current embedding model (%s). "
+                "One-time re-embedding of %d records; later runs reuse the rebuilt cache.",
+                manifest_path,
+                cache_invalidated_reason,
+                len(self.index_data),
+            )
+            manifest["records"] = {}
+        manifest["version"] = EMBEDDING_MANIFEST_VERSION
+        manifest["embedding_model"] = self.embedding_model_id
+        manifest["embedding_dim"] = expected_dim
+        manifest["chunking"] = self.chunking_id
 
         total_records = len(self.index_data)
         embedded_records = 0
@@ -159,7 +210,11 @@ class RagSearchEngine:
                     content_hash = self._content_hash(str(row.get("combined_text", "")))
                     cached = manifest["records"].get(record_key)
 
-                    if cached and cached.get("content_hash") == content_hash:
+                    if (
+                        cached
+                        and cached.get("content_hash") == content_hash
+                        and (expected_dim is None or len(cached["embedding"]) == expected_dim)
+                    ):
                         reused_records += 1
                         resolved_embeddings.append(cached.get("embedding", []))
                         continue
@@ -178,6 +233,8 @@ class RagSearchEngine:
                     response = self.embedding_model.embed(texts=pending_texts)
                     new_embeddings = extract_embeddings(response)
                     embedded_records += len(new_embeddings)
+                    if manifest["embedding_dim"] is None and new_embeddings:
+                        manifest["embedding_dim"] = len(new_embeddings[0])
 
                     for offset, embedding in enumerate(new_embeddings):
                         position = pending_positions[offset]
@@ -216,6 +273,7 @@ class RagSearchEngine:
             "reused_records": int(reused_records),
             "new_records": int(new_records),
             "changed_records": int(changed_records),
+            "cache_invalidated_reason": cache_invalidated_reason,
         }
         self._emit_observability_event(
             stage="indexing",
@@ -275,6 +333,27 @@ class RagSearchEngine:
             return f"{source_path}::{parser_name}::{source_record_id}::{chunk_index}"
         return f"row::{source_record_id}::{chunk_index}"
 
+    def _embedding_cache_mismatch(self, manifest: Dict[str, Any], expected_dim: Optional[int]) -> str:
+        """Return why cached embeddings cannot be reused with the current model, or "" if they can."""
+        if not manifest["records"]:
+            return ""
+        cached_model = manifest.get("embedding_model")
+        if not cached_model:
+            return (
+                "the cache has no embedding model metadata (written by ragsearch 0.1.5 or earlier); "
+                f"current model is {self.embedding_model_id}"
+            )
+        if cached_model != self.embedding_model_id:
+            return f"embedding model changed from {cached_model} to {self.embedding_model_id}"
+        cached_dim = manifest.get("embedding_dim")
+        if expected_dim is not None and cached_dim is not None and cached_dim != expected_dim:
+            return f"embedding dimension changed from {cached_dim} to {expected_dim}"
+        # Manifests written before chunking was recorded always used row-level chunking.
+        cached_chunking = manifest.get("chunking") or describe_chunking_strategy(RowChunkingStrategy())
+        if cached_chunking != self.chunking_id:
+            return f"chunking changed from {cached_chunking} to {self.chunking_id}"
+        return ""
+
     @staticmethod
     def _load_embedding_manifest(manifest_path: Path) -> Dict[str, Any]:
         if not manifest_path.exists():
@@ -307,7 +386,16 @@ class RagSearchEngine:
             }
 
         version = payload.get("version", 1) if isinstance(payload, dict) else 1
-        return {"version": int(version), "records": normalized_records}
+        embedding_model = payload.get("embedding_model") if isinstance(payload, dict) else None
+        embedding_dim = payload.get("embedding_dim") if isinstance(payload, dict) else None
+        chunking = payload.get("chunking") if isinstance(payload, dict) else None
+        return {
+            "version": int(version),
+            "embedding_model": embedding_model if isinstance(embedding_model, str) else None,
+            "embedding_dim": embedding_dim if isinstance(embedding_dim, int) else None,
+            "chunking": chunking if isinstance(chunking, str) else None,
+            "records": normalized_records,
+        }
 
     @staticmethod
     def _save_embedding_manifest(manifest_path: Path, manifest: Dict[str, Any]):
@@ -449,9 +537,39 @@ class RagSearchEngine:
         return "\n\n".join(blocks)
 
     @staticmethod
-    def _build_answer_prompt(query: str, results: List[Dict]) -> str:
+    def _assemble_budgeted_context(results: List[Dict], max_context_tokens: Optional[int]) -> tuple:
+        """Build the numbered sources block within a token budget.
+
+        Sources are added in score order until the next one would exceed the budget. If even the
+        first source does not fit, a prefix of its text is used so the model still gets context.
+        Returns ``(context, sources_used, truncated)``.
+        """
+        if max_context_tokens is None:
+            return RagSearchEngine._build_answer_context(results), len(results), False
+
+        max_chars = int(max_context_tokens * CHARS_PER_TOKEN)
+        context = ""
+        used = 0
+        for result in results:
+            block = RagSearchEngine._build_answer_context([result]).replace("[1]", f"[{used + 1}]", 1)
+            candidate = f"{context}\n\n{block}" if context else block
+            if len(candidate) <= max_chars:
+                context, used = candidate, used + 1
+                continue
+            if used == 0:
+                marker = " [truncated]"
+                context = block[: max(0, max_chars - len(marker))] + marker
+                context = context[:max_chars]
+                used = 1
+            break
+        truncated = used < len(results) or (used == 1 and context.endswith("[truncated]"))
+        return context, used, truncated
+
+    @staticmethod
+    def _build_answer_prompt(query: str, results: List[Dict], context: Optional[str] = None) -> str:
         """Construct a deterministic prompt for answer generation."""
-        context = RagSearchEngine._build_answer_context(results)
+        if context is None:
+            context = RagSearchEngine._build_answer_context(results)
         return "\n".join(
             [
                 "You are a retrieval-augmented assistant.",
@@ -467,11 +585,21 @@ class RagSearchEngine:
             ]
         )
 
-    def answer(self, query: str, top_k: int = 5) -> Dict[str, Any]:
-        """Generate a grounded answer with preserved retrieval citations."""
+    def answer(self, query: str, top_k: int = 5, max_context_tokens: Optional[int] = None) -> Dict[str, Any]:
+        """Generate a grounded answer with preserved retrieval citations.
+
+        The numbered sources sent to the LLM are capped at ``max_context_tokens`` estimated tokens
+        (default: the engine's ``max_context_tokens``; ``None`` on the engine means no cap). Sources
+        are added in score order; ``context_truncated`` reports whether any were left out or cut,
+        and ``citations`` lists only the sources the LLM actually received.
+        """
         generation_started = perf_counter()
         results = self.search(query, top_k=top_k)
-        prompt = self._build_answer_prompt(query, results)
+        budget = self.max_context_tokens if max_context_tokens is None else max_context_tokens
+        if budget is not None and budget <= 0:
+            raise ValueError("max_context_tokens must be > 0 when provided")
+        context, sources_used, truncated = self._assemble_budgeted_context(results, budget)
+        prompt = self._build_answer_prompt(query, results, context=context)
         answer_text = self.llm_client.generate(prompt)
         latency_ms = round((perf_counter() - generation_started) * 1000.0, 3)
 
@@ -482,7 +610,8 @@ class RagSearchEngine:
                 "query": query,
                 "top_k": int(top_k),
                 "results_count": int(len(results)),
-                "citations_count": int(len(results)),
+                "citations_count": int(sources_used),
+                "context_truncated": bool(truncated),
                 "latency_ms": latency_ms,
             },
         )
@@ -491,15 +620,36 @@ class RagSearchEngine:
             "question": query,
             "answer": answer_text,
             "results": results,
-            "citations": [result.get("citation", {}) for result in results],
-            "context": self._build_answer_context(results),
+            "citations": [result.get("citation", {}) for result in results[:sources_used]],
+            "context": context,
+            "context_sources": int(sources_used),
+            "context_truncated": bool(truncated),
+            "context_tokens_estimate": estimate_tokens(context),
         }
 
-    def run(self):
+    def run(self, host: str = "127.0.0.1", port: int = 8080):
         """
-        Launches an interactive search interface where users can input queries and see results.
+        Launches the browser search interface and HTTP API (/query, /answer) in a background thread.
+
+        Args:
+            host: Interface to listen on. Defaults to 127.0.0.1 (this machine only). The server has
+                no authentication: binding another interface (e.g. "0.0.0.0") lets anyone who can
+                reach the port spend your LLM/embedding API credits and read the indexed data.
+            port: TCP port (default 8080).
+
+        This uses Flask's development server, which is meant for local use, not production.
         """
-        logging.info("Launching browser-based search interface...")
+        if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
+            raise ValueError(f"port must be an integer between 1 and 65535, got {port!r}")
+        if not _is_loopback_host(host):
+            logging.warning(
+                "Serving on %s:%s with no authentication: anyone who can reach this port can spend "
+                "your API credits and read the indexed data. Bind 127.0.0.1 unless you need network "
+                "access, and put an authenticating proxy in front if you do.",
+                host,
+                port,
+            )
+        logging.info("Launching browser-based search interface on http://%s:%s/ ...", host, port)
 
         # Initialize Flask app
         app = Flask(__name__, template_folder="templates")
@@ -548,4 +698,4 @@ class RagSearchEngine:
             return jsonify(self.answer(query, top_k=top_k))
 
         # Run the Flask app on a separate thread
-        threading.Thread(target=app.run, kwargs={"host": "0.0.0.0", "port": 8080, "use_reloader": False}).start()
+        threading.Thread(target=app.run, kwargs={"host": host, "port": port, "use_reloader": False}).start()

@@ -5,7 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Optional, Protocol, runtime_checkable
 
+from .errors import ModelNotFoundError, is_model_not_found_error, provider_error_message
 
+
+# Cohere model IDs: https://docs.cohere.com/docs/models
+DEFAULT_COHERE_CHAT_MODEL = "command-a-03-2025"
 DEFAULT_OPENAI_CHAT_MODEL = "gpt-4o-mini"
 DEFAULT_OLLAMA_CHAT_MODEL = "llama3.1"
 
@@ -21,11 +25,23 @@ class LLMClient(Protocol):
 class CohereLLMClientAdapter:
     """Adapter exposing a stable generation surface on top of Cohere client."""
 
-    def __init__(self, client: Any):
+    def __init__(self, client: Any, model: str = DEFAULT_COHERE_CHAT_MODEL):
         self._client = client
+        self.model = model
 
     def generate(self, prompt: str, **kwargs: Any) -> str:
-        response = self._client.chat(message=prompt, **kwargs)
+        kwargs.setdefault("model", self.model)
+        try:
+            response = self._client.chat(message=prompt, **kwargs)
+        except Exception as exc:
+            if is_model_not_found_error(exc):
+                raise ModelNotFoundError(
+                    f"Cohere chat model '{kwargs['model']}' is not available: {provider_error_message(exc)} "
+                    f"Set llm_model_name to a current Cohere chat model "
+                    f"(default: '{DEFAULT_COHERE_CHAT_MODEL}'); see https://docs.cohere.com/docs/models.",
+                    cause=exc,
+                ) from exc
+            raise
         return str(getattr(response, "text", ""))
 
 
@@ -148,7 +164,7 @@ def create_llm_client(
             except ImportError as exc:
                 raise RuntimeError("Cohere SDK is not installed. Install package 'cohere'.") from exc
             client = CohereClient(api_key=api_key)
-        return CohereLLMClientAdapter(client)
+        return CohereLLMClientAdapter(client, model=model or DEFAULT_COHERE_CHAT_MODEL)
 
     if normalized_provider == "openai":
         client = openai_client

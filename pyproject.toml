@@ -1,26 +1,67 @@
 [tool.poetry]
 name = "ragsearch"
-version = "0.1.5"
-description = "ragsearch is a Python library designed for building a Retrieval-Augmented Generation (RAG) application that enables natural language querying over both structured and unstructured data. This tool leverages embedding models and a vector database (FAISS or ChromaDB) to provide an efficient and scalable search engine."
-authors = ["Mrutunjay Kinagi < mrutunjay.kinagi @ gmail.com >"]
+version = "0.2.0"
+description = "RAG over CSVs and documents, with citations, ingestion diagnostics, and a built-in evaluation harness."
+authors = ["Mrutunjay Kinagi <mrutunjay.kinagi@gmail.com>"]
 license = "MIT"
 readme = "README.md"
+homepage = "https://github.com/mrutunjay-kinagi/ragsearch"
 repository = "https://github.com/mrutunjay-kinagi/ragsearch"
+documentation = "https://github.com/mrutunjay-kinagi/ragsearch/tree/master/docs"
+keywords = ["rag", "retrieval-augmented-generation", "llm", "embeddings", "faiss", "citations", "pdf", "csv"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    # Poetry 1.8 generates 3.10-3.12 itself; CI (ci.yml) also tests 3.13 and 3.14.
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Text Processing :: Indexing",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 packages = [
     { include = "ragsearch", from = "libs" },
 ]
 
+[tool.poetry.urls]
+"Changelog" = "https://github.com/mrutunjay-kinagi/ragsearch/blob/master/CHANGELOG.md"
+"Issues" = "https://github.com/mrutunjay-kinagi/ragsearch/issues"
+
 [tool.poetry.dependencies]
-python = "^3.9"
+# <4.0 is required by Poetry because cohere declares requires-python "<4.0,>=3.9".
+python = ">=3.10,<4.0"
 flask = "^3.1.2"
 cohere = "^5.17.0"
-faiss-cpu = {version = "^1.12.0", python = ">=3.9,<3.15"}
+faiss-cpu = {version = "^1.12.0", python = ">=3.10,<3.15"}
 pandas = "^2.2.3"
-chromadb = "^1.0.20"
+# Optional extra (#125): pip install 'ragsearch[chromadb]'. Kept out of the base install because
+# chromadb 1.x has unpatched server-side advisories (GHSA-f4j7-r4q5-qw2c and others) that security
+# scanners flag, even though ragsearch only uses the embedded client, and ChromaDB mode is broken (#76).
+chromadb = {version = "^1.0.20", optional = true}
 fastavro = "^1.12.0"
+# Used directly (vector_db). Split by Python so every supported version gets a release with wheels:
+# numpy 2.3+ requires Python 3.11 and ships 3.14 wheels (2.3.3+); 2.2.x is the last line for 3.10.
+numpy = [
+    {version = ">=2.2.6,<2.3", python = "<3.11"},
+    {version = ">=2.3.3", python = ">=3.11"},
+]
+# Built-in document parsers (#100). Floors: pypdf 6.16.2 is the lowest release with no known
+# OSV advisories that extracts text like the latest (6.16.1 drops word spacing); python-docx
+# 0.8.11 and beautifulsoup4 4.9.0 are the oldest releases verified with the fallback parser.
+pypdf = ">=6.16.2"
+python-docx = ">=0.8.11"
+beautifulsoup4 = ">=4.9.0"
+
+[tool.poetry.extras]
+chromadb = ["chromadb"]
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^8.3.3"
+# The real ollama client, so tests catch response-type drift in the Ollama adapters (#129).
+ollama = ">=0.4"
+# 9.0.3 fixes GHSA-6w46-j5rx-g56g (tmpdir handling); pytest 9 needs Python >= 3.10.
+pytest = "^9.0.3"
 pylint = "^3.3.1"
 
 [tool.poetry.group.docs.dependencies]

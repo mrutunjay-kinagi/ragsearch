@@ -2,17 +2,28 @@
 Tests for empty-data handling in ragsearch.setup.
 """
 
+import importlib
 from pathlib import Path
 
 import pandas as pd
 import pytest
 
-from libs.ragsearch.errors import NoDataFoundError, ParseCorruptError, ParseTimeoutError, RagSearchError
+from libs.ragsearch.errors import (
+    EmbeddingProbeError,
+    ModelNotFoundError,
+    NoDataFoundError,
+    ParseCorruptError,
+    ParseTimeoutError,
+    RagSearchError,
+)
 from libs.ragsearch.parsers import ParsedDocument
 from libs.ragsearch.parsers._fallback import FallbackParser
 from libs.ragsearch.parsers._liteparse import LiteParseAdapter
 from libs.ragsearch.engine import RagSearchEngine
 from libs.ragsearch.setup import setup
+
+# Patch the module object: ``libs.ragsearch.setup`` as an attribute path is the setup() function (#91).
+ragsearch_setup_module = importlib.import_module("libs.ragsearch.setup")
 
 
 def test_no_data_found_is_ragsearch_error():
@@ -31,8 +42,8 @@ def test_setup_raises_no_data_found_for_empty_csv(tmp_path, monkeypatch):
         def __init__(self, *args, **kwargs):
             raise AssertionError("VectorDB should not be initialized for empty data")
 
-    monkeypatch.setattr("libs.ragsearch.setup.CohereClient", FailIfCalledCohereClient)
-    monkeypatch.setattr("libs.ragsearch.setup.VectorDB", FailIfCalledVectorDB)
+    monkeypatch.setattr(ragsearch_setup_module, "CohereClient", FailIfCalledCohereClient)
+    monkeypatch.setattr(ragsearch_setup_module, "VectorDB", FailIfCalledVectorDB)
 
     with pytest.raises(NoDataFoundError, match="No data found"):
         setup(Path(data_path), llm_api_key="test-key")
@@ -71,6 +82,12 @@ def test_setup_structured_path_skips_parser(tmp_path, monkeypatch):
         def __init__(self, *args, **kwargs):
             pass
 
+        def embed(self, texts, **kwargs):
+            class Resp:
+                embeddings = [[0.1, 0.2, 0.3] for _ in texts]
+
+            return Resp()
+
     class DummyVectorDB:
         def __init__(self, *args, **kwargs):
             pass
@@ -82,10 +99,10 @@ def test_setup_structured_path_skips_parser(tmp_path, monkeypatch):
     def fail_if_parser_called(*args, **kwargs):
         raise AssertionError("get_parser should not be called for structured inputs")
 
-    monkeypatch.setattr("libs.ragsearch.setup.CohereClient", DummyCohereClient)
-    monkeypatch.setattr("libs.ragsearch.setup.VectorDB", DummyVectorDB)
-    monkeypatch.setattr("libs.ragsearch.setup.RagSearchEngine", DummyEngine)
-    monkeypatch.setattr("libs.ragsearch.setup.get_parser", fail_if_parser_called)
+    monkeypatch.setattr(ragsearch_setup_module, "CohereClient", DummyCohereClient)
+    monkeypatch.setattr(ragsearch_setup_module, "VectorDB", DummyVectorDB)
+    monkeypatch.setattr(ragsearch_setup_module, "RagSearchEngine", DummyEngine)
+    monkeypatch.setattr(ragsearch_setup_module, "get_parser", fail_if_parser_called)
 
     engine = setup(Path(data_path), llm_api_key="test-key")
     assert isinstance(engine, DummyEngine)
@@ -98,6 +115,12 @@ def test_setup_unstructured_path_uses_parser(tmp_path, monkeypatch):
     class DummyCohereClient:
         def __init__(self, *args, **kwargs):
             pass
+
+        def embed(self, texts, **kwargs):
+            class Resp:
+                embeddings = [[0.1, 0.2, 0.3] for _ in texts]
+
+            return Resp()
 
     class DummyVectorDB:
         def __init__(self, *args, **kwargs):
@@ -122,10 +145,10 @@ def test_setup_unstructured_path_uses_parser(tmp_path, monkeypatch):
                 ]
             )
 
-    monkeypatch.setattr("libs.ragsearch.setup.CohereClient", DummyCohereClient)
-    monkeypatch.setattr("libs.ragsearch.setup.VectorDB", DummyVectorDB)
-    monkeypatch.setattr("libs.ragsearch.setup.RagSearchEngine", DummyEngine)
-    monkeypatch.setattr("libs.ragsearch.setup.get_parser", lambda *args, **kwargs: FakeParser())
+    monkeypatch.setattr(ragsearch_setup_module, "CohereClient", DummyCohereClient)
+    monkeypatch.setattr(ragsearch_setup_module, "VectorDB", DummyVectorDB)
+    monkeypatch.setattr(ragsearch_setup_module, "RagSearchEngine", DummyEngine)
+    monkeypatch.setattr(ragsearch_setup_module, "get_parser", lambda *args, **kwargs: FakeParser())
 
     setup(Path(data_path), llm_api_key="test-key")
 
@@ -141,7 +164,7 @@ def test_setup_unstructured_raises_no_data_when_parser_returns_empty(tmp_path, m
         def parse(self, path):
             return iter([])
 
-    monkeypatch.setattr("libs.ragsearch.setup.get_parser", lambda *args, **kwargs: EmptyParser())
+    monkeypatch.setattr(ragsearch_setup_module, "get_parser", lambda *args, **kwargs: EmptyParser())
 
     with pytest.raises(NoDataFoundError, match="No data found"):
         setup(Path(data_path), llm_api_key="test-key")
@@ -154,6 +177,12 @@ def test_setup_unstructured_filters_whitespace_documents(tmp_path, monkeypatch):
     class DummyCohereClient:
         def __init__(self, *args, **kwargs):
             pass
+
+        def embed(self, texts, **kwargs):
+            class Resp:
+                embeddings = [[0.1, 0.2, 0.3] for _ in texts]
+
+            return Resp()
 
     class DummyVectorDB:
         def __init__(self, *args, **kwargs):
@@ -174,10 +203,10 @@ def test_setup_unstructured_filters_whitespace_documents(tmp_path, monkeypatch):
                 ]
             )
 
-    monkeypatch.setattr("libs.ragsearch.setup.CohereClient", DummyCohereClient)
-    monkeypatch.setattr("libs.ragsearch.setup.VectorDB", DummyVectorDB)
-    monkeypatch.setattr("libs.ragsearch.setup.RagSearchEngine", DummyEngine)
-    monkeypatch.setattr("libs.ragsearch.setup.get_parser", lambda *args, **kwargs: FakeParser())
+    monkeypatch.setattr(ragsearch_setup_module, "CohereClient", DummyCohereClient)
+    monkeypatch.setattr(ragsearch_setup_module, "VectorDB", DummyVectorDB)
+    monkeypatch.setattr(ragsearch_setup_module, "RagSearchEngine", DummyEngine)
+    monkeypatch.setattr(ragsearch_setup_module, "get_parser", lambda *args, **kwargs: FakeParser())
 
     setup(Path(data_path), llm_api_key="test-key")
 
@@ -193,7 +222,7 @@ def test_setup_unstructured_parser_timeout_propagates(tmp_path, monkeypatch):
         def parse(self, path):
             raise ParseTimeoutError("timed out")
 
-    monkeypatch.setattr("libs.ragsearch.setup.get_parser", lambda *args, **kwargs: TimeoutParser())
+    monkeypatch.setattr(ragsearch_setup_module, "get_parser", lambda *args, **kwargs: TimeoutParser())
 
     with pytest.raises(ParseTimeoutError, match="timed out"):
         setup(Path(data_path), llm_api_key="test-key")
@@ -212,7 +241,7 @@ def test_setup_unstructured_all_whitespace_documents_raise_no_data(tmp_path, mon
                 ]
             )
 
-    monkeypatch.setattr("libs.ragsearch.setup.get_parser", lambda *args, **kwargs: WhitespaceParser())
+    monkeypatch.setattr(ragsearch_setup_module, "get_parser", lambda *args, **kwargs: WhitespaceParser())
 
     with pytest.raises(NoDataFoundError, match="No data found"):
         setup(Path(data_path), llm_api_key="test-key")
@@ -226,7 +255,7 @@ def test_setup_uses_embedding_dimension_from_model(tmp_path, monkeypatch):
         def __init__(self, *args, **kwargs):
             pass
 
-        def embed(self, texts):
+        def embed(self, texts, **kwargs):
             class Resp:
                 embeddings = [[0.1, 0.2, 0.3]]
 
@@ -242,16 +271,16 @@ def test_setup_uses_embedding_dimension_from_model(tmp_path, monkeypatch):
         def __init__(self, *args, **kwargs):
             pass
 
-    monkeypatch.setattr("libs.ragsearch.setup.CohereClient", DummyCohereClient)
-    monkeypatch.setattr("libs.ragsearch.setup.VectorDB", CapturingVectorDB)
-    monkeypatch.setattr("libs.ragsearch.setup.RagSearchEngine", DummyEngine)
+    monkeypatch.setattr(ragsearch_setup_module, "CohereClient", DummyCohereClient)
+    monkeypatch.setattr(ragsearch_setup_module, "VectorDB", CapturingVectorDB)
+    monkeypatch.setattr(ragsearch_setup_module, "RagSearchEngine", DummyEngine)
 
     setup(Path(data_path), llm_api_key="test-key")
 
     assert captured["embedding_dim"] == 3
 
 
-def test_setup_falls_back_to_legacy_dimension_when_probe_shape_is_invalid(tmp_path, monkeypatch):
+def test_setup_raises_clear_error_when_probe_shape_is_invalid(tmp_path, monkeypatch):
     data_path = tmp_path / "sample.csv"
     data_path.write_text("name,description\na,b\n", encoding="utf-8")
 
@@ -259,29 +288,24 @@ def test_setup_falls_back_to_legacy_dimension_when_probe_shape_is_invalid(tmp_pa
         def __init__(self, *args, **kwargs):
             pass
 
-        def embed(self, texts):
+        def embed(self, texts, **kwargs):
             return object()
 
-    captured = {}
-
-    class CapturingVectorDB:
+    class FailIfBuiltVectorDB:
         def __init__(self, embedding_dim):
-            captured["embedding_dim"] = embedding_dim
+            raise AssertionError("no vector index should be built with a guessed dimension")
 
-    class DummyEngine:
-        def __init__(self, *args, **kwargs):
-            pass
+    monkeypatch.setattr(ragsearch_setup_module, "CohereClient", DummyCohereClient)
+    monkeypatch.setattr(ragsearch_setup_module, "VectorDB", FailIfBuiltVectorDB)
 
-    monkeypatch.setattr("libs.ragsearch.setup.CohereClient", DummyCohereClient)
-    monkeypatch.setattr("libs.ragsearch.setup.VectorDB", CapturingVectorDB)
-    monkeypatch.setattr("libs.ragsearch.setup.RagSearchEngine", DummyEngine)
+    with pytest.raises(EmbeddingProbeError, match="embedding dimension") as excinfo:
+        setup(Path(data_path), llm_api_key="test-key")
 
-    setup(Path(data_path), llm_api_key="test-key")
-
-    assert captured["embedding_dim"] == 4096
+    assert isinstance(excinfo.value, RuntimeError)
+    assert "cohere" in str(excinfo.value)
 
 
-def test_setup_falls_back_to_legacy_dimension_when_probe_runtime_fails(tmp_path, monkeypatch):
+def test_setup_raises_clear_error_when_probe_runtime_fails(tmp_path, monkeypatch):
     data_path = tmp_path / "sample.csv"
     data_path.write_text("name,description\na,b\n", encoding="utf-8")
 
@@ -289,26 +313,15 @@ def test_setup_falls_back_to_legacy_dimension_when_probe_runtime_fails(tmp_path,
         def __init__(self, *args, **kwargs):
             pass
 
-        def embed(self, texts):
+        def embed(self, texts, **kwargs):
             raise RuntimeError("provider temporarily unavailable")
 
-    captured = {}
+    monkeypatch.setattr(ragsearch_setup_module, "CohereClient", DummyCohereClient)
 
-    class CapturingVectorDB:
-        def __init__(self, embedding_dim):
-            captured["embedding_dim"] = embedding_dim
+    with pytest.raises(EmbeddingProbeError, match="provider temporarily unavailable") as excinfo:
+        setup(Path(data_path), llm_api_key="test-key")
 
-    class DummyEngine:
-        def __init__(self, *args, **kwargs):
-            pass
-
-    monkeypatch.setattr("libs.ragsearch.setup.CohereClient", DummyCohereClient)
-    monkeypatch.setattr("libs.ragsearch.setup.VectorDB", CapturingVectorDB)
-    monkeypatch.setattr("libs.ragsearch.setup.RagSearchEngine", DummyEngine)
-
-    setup(Path(data_path), llm_api_key="test-key")
-
-    assert captured["embedding_dim"] == 4096
+    assert isinstance(excinfo.value.cause, RuntimeError)
 
 
 def test_setup_uses_configured_embedding_provider_factory(tmp_path, monkeypatch):
@@ -320,7 +333,7 @@ def test_setup_uses_configured_embedding_provider_factory(tmp_path, monkeypatch)
             pass
 
     class DummyEmbeddingModel:
-        def embed(self, texts):
+        def embed(self, texts, **kwargs):
             class Resp:
                 embeddings = [[0.1, 0.2, 0.3]]
 
@@ -339,10 +352,10 @@ def test_setup_uses_configured_embedding_provider_factory(tmp_path, monkeypatch)
         def __init__(self, *args, **kwargs):
             pass
 
-    monkeypatch.setattr("libs.ragsearch.setup.CohereClient", DummyCohereClient)
-    monkeypatch.setattr("libs.ragsearch.setup.create_embedding_model", fake_create_embedding_model)
-    monkeypatch.setattr("libs.ragsearch.setup.build_vector_backend", lambda **kwargs: object())
-    monkeypatch.setattr("libs.ragsearch.setup.RagSearchEngine", DummyEngine)
+    monkeypatch.setattr(ragsearch_setup_module, "CohereClient", DummyCohereClient)
+    monkeypatch.setattr(ragsearch_setup_module, "create_embedding_model", fake_create_embedding_model)
+    monkeypatch.setattr(ragsearch_setup_module, "build_vector_backend", lambda **kwargs: object())
+    monkeypatch.setattr(ragsearch_setup_module, "RagSearchEngine", DummyEngine)
 
     setup(
         Path(data_path),
@@ -369,9 +382,9 @@ def test_setup_raises_runtime_error_for_invalid_embedding_provider(tmp_path, mon
         def __init__(self, *args, **kwargs):
             pass
 
-    monkeypatch.setattr("libs.ragsearch.setup.CohereClient", DummyCohereClient)
+    monkeypatch.setattr(ragsearch_setup_module, "CohereClient", DummyCohereClient)
     monkeypatch.setattr(
-        "libs.ragsearch.setup.create_embedding_model",
+        ragsearch_setup_module, "create_embedding_model",
         lambda *args, **kwargs: (_ for _ in ()).throw(ValueError("Unsupported embedding provider")),
     )
 
@@ -392,7 +405,7 @@ def test_setup_uses_configured_llm_provider_factory(tmp_path, monkeypatch):
             return "ok"
 
     class DummyEmbeddingModel:
-        def embed(self, texts):
+        def embed(self, texts, **kwargs):
             class Resp:
                 embeddings = [[0.1, 0.2, 0.3]]
 
@@ -414,11 +427,11 @@ def test_setup_uses_configured_llm_provider_factory(tmp_path, monkeypatch):
         def __init__(self, *args, **kwargs):
             captured["llm_client"] = kwargs["llm_client"]
 
-    monkeypatch.setattr("libs.ragsearch.setup.CohereClient", DummyCohereClient)
-    monkeypatch.setattr("libs.ragsearch.setup.create_llm_client", fake_create_llm_client)
-    monkeypatch.setattr("libs.ragsearch.setup.create_embedding_model", fake_create_embedding_model)
-    monkeypatch.setattr("libs.ragsearch.setup.build_vector_backend", lambda **kwargs: object())
-    monkeypatch.setattr("libs.ragsearch.setup.RagSearchEngine", DummyEngine)
+    monkeypatch.setattr(ragsearch_setup_module, "CohereClient", DummyCohereClient)
+    monkeypatch.setattr(ragsearch_setup_module, "create_llm_client", fake_create_llm_client)
+    monkeypatch.setattr(ragsearch_setup_module, "create_embedding_model", fake_create_embedding_model)
+    monkeypatch.setattr(ragsearch_setup_module, "build_vector_backend", lambda **kwargs: object())
+    monkeypatch.setattr(ragsearch_setup_module, "RagSearchEngine", DummyEngine)
 
     setup(
         Path(data_path),
@@ -445,14 +458,14 @@ def test_setup_raises_runtime_error_for_invalid_llm_provider(tmp_path, monkeypat
             raise AssertionError("CohereClient should not be initialized for invalid LLM provider config")
 
     class DummyEmbeddingModel:
-        def embed(self, texts):
+        def embed(self, texts, **kwargs):
             class Resp:
                 embeddings = [[0.1, 0.2, 0.3]]
 
             return Resp()
 
-    monkeypatch.setattr("libs.ragsearch.setup.CohereClient", DummyCohereClient)
-    monkeypatch.setattr("libs.ragsearch.setup.create_embedding_model", lambda *args, **kwargs: DummyEmbeddingModel())
+    monkeypatch.setattr(ragsearch_setup_module, "CohereClient", DummyCohereClient)
+    monkeypatch.setattr(ragsearch_setup_module, "create_embedding_model", lambda *args, **kwargs: DummyEmbeddingModel())
 
     with pytest.raises(RuntimeError, match="Failed to initialize LLM client"):
         setup(Path(data_path), llm_api_key="test-key", llm_provider="invalid")
@@ -466,7 +479,7 @@ def test_setup_exposes_structured_ingestion_diagnostics(tmp_path, monkeypatch):
         def __init__(self, *args, **kwargs):
             pass
 
-        def embed(self, texts):
+        def embed(self, texts, **kwargs):
             class Resp:
                 embeddings = [[0.1, 0.2, 0.3]]
 
@@ -476,9 +489,9 @@ def test_setup_exposes_structured_ingestion_diagnostics(tmp_path, monkeypatch):
         def __init__(self, *args, **kwargs):
             pass
 
-    monkeypatch.setattr("libs.ragsearch.setup.CohereClient", DummyCohereClient)
-    monkeypatch.setattr("libs.ragsearch.setup.build_vector_backend", lambda **kwargs: object())
-    monkeypatch.setattr("libs.ragsearch.setup.RagSearchEngine", DummyEngine)
+    monkeypatch.setattr(ragsearch_setup_module, "CohereClient", DummyCohereClient)
+    monkeypatch.setattr(ragsearch_setup_module, "build_vector_backend", lambda **kwargs: object())
+    monkeypatch.setattr(ragsearch_setup_module, "RagSearchEngine", DummyEngine)
 
     engine = setup(Path(data_path), llm_api_key="test-key")
 
@@ -512,7 +525,7 @@ def test_setup_unstructured_uses_fallback_when_liteparse_runtime_fails(tmp_path,
         def __init__(self, *args, **kwargs):
             pass
 
-        def embed(self, texts):
+        def embed(self, texts, **kwargs):
             class Resp:
                 embeddings = [[0.1, 0.2, 0.3]]
 
@@ -528,9 +541,9 @@ def test_setup_unstructured_uses_fallback_when_liteparse_runtime_fails(tmp_path,
         def __init__(self, *args, **kwargs):
             captured["data"] = kwargs["data"]
 
-    monkeypatch.setattr("libs.ragsearch.setup.CohereClient", DummyCohereClient)
-    monkeypatch.setattr("libs.ragsearch.setup.VectorDB", DummyVectorDB)
-    monkeypatch.setattr("libs.ragsearch.setup.RagSearchEngine", DummyEngine)
+    monkeypatch.setattr(ragsearch_setup_module, "CohereClient", DummyCohereClient)
+    monkeypatch.setattr(ragsearch_setup_module, "VectorDB", DummyVectorDB)
+    monkeypatch.setattr(ragsearch_setup_module, "RagSearchEngine", DummyEngine)
 
     # Force LiteParse selection and runtime failure.
     monkeypatch.setattr(LiteParseAdapter, "available", classmethod(lambda cls: True))
@@ -539,7 +552,7 @@ def test_setup_unstructured_uses_fallback_when_liteparse_runtime_fails(tmp_path,
         raise ParseTimeoutError("LiteParse timed out")
 
     monkeypatch.setattr(LiteParseAdapter, "parse", raise_liteparse_error)
-    monkeypatch.setattr("libs.ragsearch.setup.get_parser", lambda path: LiteParseAdapter())
+    monkeypatch.setattr(ragsearch_setup_module, "get_parser", lambda path: LiteParseAdapter())
 
     engine = setup(Path(data_path), llm_api_key="test-key")
 
@@ -575,7 +588,7 @@ def test_setup_unstructured_reraises_primary_error_when_fallback_also_fails(tmp_
         def __init__(self, *args, **kwargs):
             pass
 
-    monkeypatch.setattr("libs.ragsearch.setup.CohereClient", DummyCohereClient)
+    monkeypatch.setattr(ragsearch_setup_module, "CohereClient", DummyCohereClient)
     monkeypatch.setattr(LiteParseAdapter, "available", classmethod(lambda cls: True))
 
     def raise_liteparse_error(self, path):
@@ -586,7 +599,7 @@ def test_setup_unstructured_reraises_primary_error_when_fallback_also_fails(tmp_
 
     monkeypatch.setattr(LiteParseAdapter, "parse", raise_liteparse_error)
     monkeypatch.setattr(FallbackParser, "parse", raise_fallback_error)
-    monkeypatch.setattr("libs.ragsearch.setup.get_parser", lambda path: LiteParseAdapter())
+    monkeypatch.setattr(ragsearch_setup_module, "get_parser", lambda path: LiteParseAdapter())
 
     with pytest.raises(ParseTimeoutError, match="LiteParse timed out"):
         setup(Path(data_path), llm_api_key="test-key")
@@ -600,7 +613,7 @@ def test_setup_unstructured_fallback_primary_error_propagates(tmp_path, monkeypa
         def parse(self, path):
             raise ParseCorruptError("Fallback primary failed")
 
-    monkeypatch.setattr("libs.ragsearch.setup.get_parser", lambda path: FailingFallbackParser())
+    monkeypatch.setattr(ragsearch_setup_module, "get_parser", lambda path: FailingFallbackParser())
 
     with pytest.raises(ParseCorruptError, match="Fallback primary failed"):
         setup(Path(data_path), llm_api_key="test-key")
@@ -616,7 +629,7 @@ def test_setup_unstructured_reraises_liteparse_error_when_fallback_unsupported(t
         raise ParseTimeoutError("LiteParse timed out")
 
     monkeypatch.setattr(LiteParseAdapter, "parse", raise_liteparse_error)
-    monkeypatch.setattr("libs.ragsearch.setup.get_parser", lambda path: LiteParseAdapter())
+    monkeypatch.setattr(ragsearch_setup_module, "get_parser", lambda path: LiteParseAdapter())
 
     with pytest.raises(ParseTimeoutError, match="LiteParse timed out"):
         setup(Path(data_path), llm_api_key="test-key")
@@ -630,7 +643,7 @@ def test_setup_uses_backend_factory_for_vector_backend(tmp_path, monkeypatch):
         def __init__(self, *args, **kwargs):
             pass
 
-        def embed(self, texts):
+        def embed(self, texts, **kwargs):
             class Resp:
                 embeddings = [[0.1, 0.2, 0.3]]
 
@@ -647,9 +660,9 @@ def test_setup_uses_backend_factory_for_vector_backend(tmp_path, monkeypatch):
         def __init__(self, *args, **kwargs):
             captured["vector_db"] = kwargs["vector_db"]
 
-    monkeypatch.setattr("libs.ragsearch.setup.CohereClient", DummyCohereClient)
-    monkeypatch.setattr("libs.ragsearch.setup.build_vector_backend", fake_build_vector_backend)
-    monkeypatch.setattr("libs.ragsearch.setup.RagSearchEngine", DummyEngine)
+    monkeypatch.setattr(ragsearch_setup_module, "CohereClient", DummyCohereClient)
+    monkeypatch.setattr(ragsearch_setup_module, "build_vector_backend", fake_build_vector_backend)
+    monkeypatch.setattr(ragsearch_setup_module, "RagSearchEngine", DummyEngine)
 
     setup(Path(data_path), llm_api_key="test-key")
 
@@ -665,7 +678,7 @@ def test_setup_wraps_llm_client_with_protocol_adapter(tmp_path, monkeypatch):
         def __init__(self, *args, **kwargs):
             pass
 
-        def embed(self, texts):
+        def embed(self, texts, **kwargs):
             class Resp:
                 embeddings = [[0.1, 0.2, 0.3]]
 
@@ -677,9 +690,9 @@ def test_setup_wraps_llm_client_with_protocol_adapter(tmp_path, monkeypatch):
         def __init__(self, *args, **kwargs):
             captured["llm_client"] = kwargs["llm_client"]
 
-    monkeypatch.setattr("libs.ragsearch.setup.CohereClient", DummyCohereClient)
-    monkeypatch.setattr("libs.ragsearch.setup.build_vector_backend", lambda **kwargs: object())
-    monkeypatch.setattr("libs.ragsearch.setup.RagSearchEngine", DummyEngine)
+    monkeypatch.setattr(ragsearch_setup_module, "CohereClient", DummyCohereClient)
+    monkeypatch.setattr(ragsearch_setup_module, "build_vector_backend", lambda **kwargs: object())
+    monkeypatch.setattr(ragsearch_setup_module, "RagSearchEngine", DummyEngine)
 
     setup(Path(data_path), llm_api_key="test-key")
 
@@ -694,7 +707,7 @@ def test_setup_passes_retrieval_quality_hooks_to_engine(tmp_path, monkeypatch):
         def __init__(self, *args, **kwargs):
             pass
 
-        def embed(self, texts):
+        def embed(self, texts, **kwargs):
             class Resp:
                 embeddings = [[0.1, 0.2, 0.3]]
 
@@ -718,9 +731,9 @@ def test_setup_passes_retrieval_quality_hooks_to_engine(tmp_path, monkeypatch):
     chunking_strategy = DummyChunkingStrategy()
     reranker = DummyReranker()
 
-    monkeypatch.setattr("libs.ragsearch.setup.CohereClient", DummyCohereClient)
-    monkeypatch.setattr("libs.ragsearch.setup.build_vector_backend", lambda **kwargs: object())
-    monkeypatch.setattr("libs.ragsearch.setup.RagSearchEngine", DummyEngine)
+    monkeypatch.setattr(ragsearch_setup_module, "CohereClient", DummyCohereClient)
+    monkeypatch.setattr(ragsearch_setup_module, "build_vector_backend", lambda **kwargs: object())
+    monkeypatch.setattr(ragsearch_setup_module, "RagSearchEngine", DummyEngine)
 
     setup(
         Path(data_path),
@@ -731,3 +744,63 @@ def test_setup_passes_retrieval_quality_hooks_to_engine(tmp_path, monkeypatch):
 
     assert captured["chunking_strategy"] is chunking_strategy
     assert captured["reranker"] is reranker
+
+def test_setup_passes_cohere_model_names_to_client(tmp_path, monkeypatch):
+    data_path = tmp_path / "sample.csv"
+    data_path.write_text("name,description\na,b\n", encoding="utf-8")
+    calls = {"embed": [], "chat": []}
+
+    class DummyCohereClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def embed(self, texts, **kwargs):
+            calls["embed"].append(kwargs)
+
+            class Resp:
+                embeddings = [[0.1, 0.2, 0.3] for _ in texts]
+
+            return Resp()
+
+        def chat(self, message, **kwargs):
+            calls["chat"].append(kwargs)
+
+            class Resp:
+                text = "answer"
+
+            return Resp()
+
+    monkeypatch.setattr(ragsearch_setup_module, "CohereClient", DummyCohereClient)
+
+    engine = setup(
+        Path(data_path),
+        llm_api_key="test-key",
+        embeddings_dir=str(tmp_path / "cache"),
+        embedding_model_name="embed-english-v3.0",
+        llm_model_name="command-a-plus-05-2026",
+    )
+    engine.answer("a", top_k=1)
+
+    assert calls["embed"] and all(call["model"] == "embed-english-v3.0" for call in calls["embed"])
+    assert calls["chat"] == [{"model": "command-a-plus-05-2026"}]
+
+
+def test_setup_raises_model_not_found_instead_of_falling_back(tmp_path, monkeypatch):
+    data_path = tmp_path / "sample.csv"
+    data_path.write_text("name,description\na,b\n", encoding="utf-8")
+
+    class CohereNotFoundError(Exception):
+        status_code = 404
+        body = {"message": "model 'large' not found, make sure the correct model ID was used."}
+
+    class DummyCohereClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def embed(self, texts, **kwargs):
+            raise CohereNotFoundError()
+
+    monkeypatch.setattr(ragsearch_setup_module, "CohereClient", DummyCohereClient)
+
+    with pytest.raises(ModelNotFoundError, match="embedding_model_name"):
+        setup(Path(data_path), llm_api_key="test-key", embedding_model_name="large")

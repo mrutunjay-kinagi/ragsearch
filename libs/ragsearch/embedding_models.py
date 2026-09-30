@@ -5,7 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, List, Protocol, Sequence, runtime_checkable
 
+from .errors import ModelNotFoundError, is_model_not_found_error, provider_error_message
 
+
+# Cohere model IDs: https://docs.cohere.com/docs/models
+DEFAULT_COHERE_EMBEDDING_MODEL = "embed-v4.0"
+# v3+ Cohere embed models require input_type: https://docs.cohere.com/v1/reference/embed
+DEFAULT_COHERE_EMBEDDING_INPUT_TYPE = "search_document"
 DEFAULT_SENTENCE_TRANSFORMERS_MODEL = "all-MiniLM-L6-v2"
 DEFAULT_OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
 DEFAULT_OLLAMA_EMBEDDING_MODEL = "nomic-embed-text"
@@ -31,9 +37,21 @@ class CohereEmbeddingAdapter:
     """Adapter that presents a stable embedding contract over Cohere-like clients."""
 
     client: Any
+    model: str = DEFAULT_COHERE_EMBEDDING_MODEL
+    input_type: str = DEFAULT_COHERE_EMBEDDING_INPUT_TYPE
 
     def embed(self, texts: Sequence[str]) -> Any:
-        return self.client.embed(texts=list(texts))
+        try:
+            return self.client.embed(texts=list(texts), model=self.model, input_type=self.input_type)
+        except Exception as exc:
+            if is_model_not_found_error(exc):
+                raise ModelNotFoundError(
+                    f"Cohere embedding model '{self.model}' is not available: {provider_error_message(exc)} "
+                    f"Set embedding_model_name to a current Cohere embedding model "
+                    f"(default: '{DEFAULT_COHERE_EMBEDDING_MODEL}'); see https://docs.cohere.com/docs/models.",
+                    cause=exc,
+                ) from exc
+            raise
 
 
 @dataclass
@@ -59,6 +77,7 @@ class SentenceTransformersEmbeddingAdapter:
     """Adapter for sentence-transformers models."""
 
     model: Any
+    model_name: str | None = None
 
     def embed(self, texts: Sequence[str]) -> EmbeddingResponse:
         encoded = self.model.encode(list(texts))
@@ -67,6 +86,17 @@ class SentenceTransformersEmbeddingAdapter:
         if isinstance(encoded, list) and encoded and not isinstance(encoded[0], list):
             encoded = [encoded]
         return EmbeddingResponse(embeddings=extract_embeddings(EmbeddingResponse(embeddings=encoded)))
+
+
+def _response_field(payload: Any, name: str) -> Any:
+    """Read ``name`` from a dict response or a typed (attribute-based) response object.
+
+    The ollama client returns typed pydantic responses (e.g. ``ollama.EmbedResponse``), which are
+    not dicts; older clients and raw HTTP payloads are plain dicts (#129).
+    """
+    if isinstance(payload, dict):
+        return payload.get(name)
+    return getattr(payload, name, None)
 
 
 @dataclass
@@ -79,18 +109,14 @@ class OllamaEmbeddingAdapter:
     def embed(self, texts: Sequence[str]) -> EmbeddingResponse:
         if hasattr(self.client, "embed"):
             payload = self.client.embed(model=self.model, input=list(texts))
-            raw_vectors = payload.get("embeddings") if isinstance(payload, dict) else None
+            raw_vectors = _response_field(payload, "embeddings")
             return EmbeddingResponse(embeddings=extract_embeddings(EmbeddingResponse(embeddings=raw_vectors)))
 
         if hasattr(self.client, "embeddings"):
             vectors: List[List[float]] = []
             for text in texts:
                 payload = self.client.embeddings(model=self.model, prompt=text)
-                if isinstance(payload, dict):
-                    vector = payload.get("embedding")
-                else:
-                    vector = getattr(payload, "embedding", None)
-                vectors.append(vector)
+                vectors.append(_response_field(payload, "embedding"))
             return EmbeddingResponse(embeddings=extract_embeddings(EmbeddingResponse(embeddings=vectors)))
 
         raise ValueError("Ollama client must provide either 'embed' or 'embeddings'.")
@@ -118,7 +144,7 @@ def create_embedding_model(
             except ImportError as exc:
                 raise RuntimeError("Cohere SDK is not installed. Install package 'cohere'.") from exc
             client = CohereClient(api_key=api_key)
-        return CohereEmbeddingAdapter(client)
+        return CohereEmbeddingAdapter(client, model=model or DEFAULT_COHERE_EMBEDDING_MODEL)
 
     if normalized_provider in {"sentence_transformers", "sentence-transformers"}:
         try:
@@ -127,7 +153,8 @@ def create_embedding_model(
             raise RuntimeError(
                 "sentence-transformers is not installed. Install package 'sentence-transformers'."
             ) from exc
-        return SentenceTransformersEmbeddingAdapter(SentenceTransformer(model or DEFAULT_SENTENCE_TRANSFORMERS_MODEL))
+        model_name = model or DEFAULT_SENTENCE_TRANSFORMERS_MODEL
+        return SentenceTransformersEmbeddingAdapter(SentenceTransformer(model_name), model_name=model_name)
 
     if normalized_provider == "openai":
         if not api_key:
@@ -174,6 +201,21 @@ def extract_embeddings(response: Any) -> List[List[float]]:
             raise ValueError("Each embedding must be a numeric sequence.") from exc
 
     return normalized
+
+
+def describe_embedding_model(embedding_model: Any) -> str:
+    """Return a stable identity for an embedding model, used to validate cached embeddings.
+
+    The identity is the class name plus the model name, taken from a string
+    ``model_name`` or ``model`` attribute when the object has one
+    (for example ``"OpenAIEmbeddingAdapter:text-embedding-3-small"``).
+    """
+    identity = type(embedding_model).__name__
+    for attribute in ("model_name", "model"):
+        name = getattr(embedding_model, attribute, None)
+        if isinstance(name, str) and name.strip():
+            return f"{identity}:{name.strip()}"
+    return identity
 
 
 def infer_embedding_dimension(embedding_model: EmbeddingModel, probe_text: str = "dimension probe") -> int:

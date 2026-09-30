@@ -6,14 +6,9 @@ import faiss
 import numpy as np
 import logging
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+from .errors import MissingOptionalDependencyError, NoDataFoundError
 
-
-
-import chromadb
-from chromadb.config import Settings
-from .errors import NoDataFoundError
+logger = logging.getLogger(__name__)
 
 class VectorDB:
     def __init__(self, embedding_dim: int = 1024):
@@ -28,10 +23,11 @@ class VectorDB:
         if not isinstance(embedding_dim, int) or embedding_dim <= 0:
             raise ValueError("embedding_dim must be a positive integer")
         # Use IndexFlatIP for cosine similarity (requires normalized embeddings)
+        self.embedding_dim = embedding_dim
         self.index = faiss.IndexFlatIP(embedding_dim)
         self.metadata_store = {}  # Dictionary to store metadata
         self.current_id = 0  # Incremental ID to track embeddings
-        logging.info(f"FAISS VectorDB initialized with dimension: {embedding_dim}")
+        logger.info(f"FAISS VectorDB initialized with dimension: {embedding_dim}")
 
     def insert(self, embedding: list, metadata: dict) -> None:
         """
@@ -91,17 +87,31 @@ class VectorDB:
                     metadata = self.metadata_store.get(idx, {})
                     results.append({"index": idx, "similarity": dist, "metadata": metadata})
 
-            logging.info(f"Search completed. Found {len(results)} results.")
+            logger.info(f"Search completed. Found {len(results)} results.")
             return results
         except Exception as e:
-            logging.error(f"Failed to search in vector database: {e}")
+            logger.error(f"Failed to search in vector database: {e}")
             raise
+
+
+def import_chromadb():
+    """Import chromadb, which is an optional extra (#125); raise a clear error if it is missing."""
+    try:
+        import chromadb
+    except ImportError as exc:
+        raise MissingOptionalDependencyError(
+            "ChromaDB mode needs the optional 'chromadb' extra, which is not installed. "
+            "Install it with: pip install 'ragsearch[chromadb]'",
+            cause=exc,
+        ) from exc
+    return chromadb
 
 
 def get_chromadb_collection(sqlite_path: str, collection_name: str):
     """
     Connects to a ChromaDB SQLite file and returns the specified collection using the new PersistentClient API.
     """
+    chromadb = import_chromadb()
     client = chromadb.PersistentClient(path=sqlite_path)
     return client.get_collection(collection_name)
 

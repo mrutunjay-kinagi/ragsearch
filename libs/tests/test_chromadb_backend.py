@@ -6,11 +6,19 @@ XPASS (failing the suite) once ChromaDB is routed through the VectorBackend
 protocol, at which point the xfail markers should be removed.
 """
 
+import importlib
 from pathlib import Path
 
 import pytest
 
-from libs.ragsearch.setup import setup
+# chromadb is an optional extra (#125): without it these tests would "xfail" for the wrong reason.
+# CI runs them in a job with `poetry install --extras chromadb`.
+pytest.importorskip("chromadb")
+
+from libs.ragsearch.setup import setup  # noqa: E402
+
+# Patch the module object: ``libs.ragsearch.setup`` as an attribute path is the setup() function (#91).
+ragsearch_setup_module = importlib.import_module("libs.ragsearch.setup")
 
 
 class DummyEmbeddingResponse:
@@ -57,7 +65,7 @@ def chroma_engine(tmp_path, monkeypatch):
         encoding="utf-8",
     )
     client = DummyCohereClient()
-    monkeypatch.setattr("libs.ragsearch.setup.CohereClient", lambda *args, **kwargs: client)
+    monkeypatch.setattr(ragsearch_setup_module, "CohereClient", lambda *args, **kwargs: client)
 
     engine = setup(
         Path(data_path),

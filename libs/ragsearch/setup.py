@@ -20,6 +20,7 @@ The returned RagSearchEngine instance will use the selected backend for queries.
 """
 import os
 import logging
+import warnings
 from pathlib import Path
 from time import perf_counter
 from typing import Optional
@@ -28,20 +29,29 @@ try:
     from cohere import Client as CohereClient
 except ImportError:
     CohereClient = None  # type: ignore[assignment,misc]
-from .errors import NoDataFoundError, ParsingError, RagSearchError
+from .errors import (
+    EmbeddingProbeError,
+    ModelNotFoundError,
+    NoDataFoundError,
+    ParsingError,
+    RagSearchError,
+    provider_error_message,
+)
 from .embedding_models import create_embedding_model, infer_embedding_dimension
 from .llm_clients import create_llm_client
 from .parsers import FallbackParser, LiteParseAdapter, get_parser
-from .chunking import ChunkingStrategy
+from .chunking import ChunkingStrategy, default_unstructured_chunking_strategy
 from .reranking import Reranker
-from .vector_db import VectorDB
-from .engine import RagSearchEngine
+from .vector_db import VectorDB, import_chromadb
+from .engine import DEFAULT_MAX_CONTEXT_TOKENS, RagSearchEngine
 
 
 # File types loaded directly via pandas (no parser dispatch needed)
 STRUCTURED_EXTENSIONS = {".csv", ".json", ".parquet", ".pq"}
 SUPPORTED_EMBEDDING_PROVIDERS = {"cohere", "openai", "ollama", "sentence_transformers"}
 SUPPORTED_LLM_PROVIDERS = {"cohere", "openai", "ollama"}
+# Providers that do not authenticate with an API key.
+KEYLESS_PROVIDERS = {"ollama", "sentence_transformers"}
 logger = logging.getLogger(__name__)
 
 
@@ -56,6 +66,39 @@ def _validate_provider(provider: str, supported: set[str], kind: str) -> str:
             f"Unsupported {kind} provider: {provider}. Supported providers: {', '.join(sorted(supported))}."
         )
     return normalized
+
+
+def _resolve_embedding_api_key(
+    embedding_provider: str,
+    llm_provider: str,
+    embedding_api_key: Optional[str],
+    llm_api_key: str,
+) -> Optional[str]:
+    """Pick the embedding provider's API key without sending one provider's key to another.
+
+    llm_api_key is only reused for embeddings when both providers are the same.
+    """
+    if embedding_api_key:
+        return embedding_api_key
+    if embedding_provider in KEYLESS_PROVIDERS:
+        return None
+    if embedding_provider == llm_provider:
+        return llm_api_key
+    if llm_provider in KEYLESS_PROVIDERS:
+        # The LLM provider ignores llm_api_key, so it can only have been meant for embeddings.
+        warnings.warn(
+            f"Using llm_api_key for the '{embedding_provider}' embedding provider because llm_provider "
+            f"'{llm_provider}' needs no key. Pass embedding_api_key instead; this fallback will be removed "
+            "in a future release.",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        return llm_api_key
+    raise ValueError(
+        f"embedding_provider '{embedding_provider}' differs from llm_provider '{llm_provider}', so "
+        f"llm_api_key (your {llm_provider} key) is not sent to {embedding_provider}. "
+        f"Pass embedding_api_key with your {embedding_provider} API key."
+    )
 
 
 def build_vector_backend(*, embedding_dim: int):
@@ -169,31 +212,38 @@ def setup(data_path: Path,
           embedding_base_url: Optional[str] = None,
           llm_provider: str = "cohere",
           llm_model_name: Optional[str] = None,
-          llm_base_url: Optional[str] = None):
+          llm_base_url: Optional[str] = None,
+          max_context_tokens: Optional[int] = DEFAULT_MAX_CONTEXT_TOKENS):
     """
     Initializes the RAG search engine from structured or unstructured data.
 
-    Data loading strategy (Slice 2 integration):
+    Data loading strategy:
     - Structured (CSV, JSON, Parquet): Loaded directly via pandas, bypassing parser.
-    - Unstructured (.txt, .pdf, .docx, etc.): Dispatched to parser via get_parser() contract.
+    - Unstructured (.txt, .pdf, .docx, etc.): Parsed with LiteParse, or the fallback parsers.
 
     Args:
         data_path (Path): The path to the data file (structured or unstructured).
-        llm_api_key (str): The API key for the Cohere client.
+        llm_api_key (str): API key for the LLM provider (Cohere by default).
         use_chromadb (bool): Whether to use ChromaDB instead of FAISS (default: False).
         chromadb_sqlite_path (str): Path to ChromaDB SQLite database (required if use_chromadb=True).
         chromadb_collection_name (str): ChromaDB collection name (required if use_chromadb=True).
         embeddings_dir (str): Optional directory for local embedding manifest/cache files.
-        chunking_strategy: Optional text chunking strategy for retrieval indexing.
+        chunking_strategy: Optional text chunking strategy for retrieval indexing. Defaults to
+            overlapping word windows for unstructured files (PDF, DOCX, HTML, text) and to one chunk
+            per row for structured files (CSV, JSON, Parquet).
         reranker: Optional result reranker applied after retrieval.
         observability_max_events (Optional[int]): Maximum in-memory observability events retained by engine.
         embedding_provider (str): Embedding provider identifier (default: "cohere").
         embedding_model_name (str): Optional provider-specific model name.
-        embedding_api_key (str): Optional API key for embedding provider; defaults to llm_api_key.
+        embedding_api_key (str): Optional API key for the embedding provider. Defaults to llm_api_key only
+            when embedding_provider and llm_provider are the same; required when they differ, unless the
+            embedding provider needs no key (ollama, sentence_transformers).
         embedding_base_url (str): Optional base URL for provider endpoints (for OpenAI-compatible or Ollama hosts).
         llm_provider (str): LLM provider identifier (default: "cohere").
         llm_model_name (str): Optional provider-specific chat model name.
         llm_base_url (str): Optional base URL for provider endpoints (for OpenAI-compatible or Ollama hosts).
+        max_context_tokens (Optional[int]): Cap on the estimated tokens of the sources answer() sends to
+            the LLM (default 3000); None disables the cap.
     Returns:
         RagSearchEngine: The initialized RAG search engine.
     Raises:
@@ -202,7 +252,9 @@ def setup(data_path: Path,
         NoDataFoundError: If no data found:
             - Structured: Empty file
             - Unstructured: Parser returns no documents or all content is empty
-        ValueError: If CSV/JSON/Parquet file format is invalid (structured path only).
+        ValueError: If CSV/JSON/Parquet file format is invalid (structured path only), or if the
+            providers differ and embedding_api_key is missing.
+        EmbeddingProbeError: If the embedding dimension cannot be determined from a probe embedding.
         RagSearchError: If unstructured parser fails (UnsupportedFileTypeError, ParsingError, etc.).
         RuntimeError: For other data loading, Cohere client, or vector database errors.
     """
@@ -216,6 +268,10 @@ def setup(data_path: Path,
     # Validate data path exists
     if not data_path.exists():
         raise FileNotFoundError(f"Data path does not exist: {data_path}")
+
+    if use_chromadb:
+        # chromadb is an optional extra (#125); fail before any parsing or provider calls.
+        import_chromadb()
 
     ingestion_diagnostics = {
         "source_path": str(data_path),
@@ -243,6 +299,10 @@ def setup(data_path: Path,
     if data.empty:
         raise NoDataFoundError(f"No data found in input file: {data_path}")
 
+    if chunking_strategy is None and data_path.suffix not in STRUCTURED_EXTENSIONS:
+        # One chunk per document would send whole documents to the LLM (#77).
+        chunking_strategy = default_unstructured_chunking_strategy()
+
     # Get file name for logging/engine initialization
     file_name = data_path.name
 
@@ -256,14 +316,27 @@ def setup(data_path: Path,
     except ValueError as e:
         raise RuntimeError(f"Failed to initialize embedding model: {e}") from e
 
-    cohere_client = None
-    if llm_provider_name == "cohere" or embedding_provider_name == "cohere":
-        if CohereClient is None:
-            raise RuntimeError("Cohere SDK is not installed. Install package 'cohere'.")
-        try:
-            cohere_client = CohereClient(api_key=llm_api_key)
-        except Exception as e:
-            raise RuntimeError(f"Failed to initialize Cohere client: {e}") from e
+    resolved_embedding_api_key = _resolve_embedding_api_key(
+        embedding_provider_name, llm_provider_name, embedding_api_key, llm_api_key
+    )
+
+    # One Cohere client per distinct key, so the LLM and embeddings each use their own key.
+    cohere_clients = {}
+
+    def cohere_client_for(api_key):
+        if api_key not in cohere_clients:
+            if CohereClient is None:
+                raise RuntimeError("Cohere SDK is not installed. Install package 'cohere'.")
+            try:
+                cohere_clients[api_key] = CohereClient(api_key=api_key)
+            except Exception as e:
+                raise RuntimeError(f"Failed to initialize Cohere client: {e}") from e
+        return cohere_clients[api_key]
+
+    llm_cohere_client = cohere_client_for(llm_api_key) if llm_provider_name == "cohere" else None
+    embedding_cohere_client = (
+        cohere_client_for(resolved_embedding_api_key) if embedding_provider_name == "cohere" else None
+    )
 
     try:
         llm_client = create_llm_client(
@@ -271,7 +344,7 @@ def setup(data_path: Path,
             api_key=llm_api_key,
             model=llm_model_name,
             base_url=llm_base_url,
-            cohere_client=cohere_client,
+            cohere_client=llm_cohere_client,
         )
     except Exception as e:
         raise RuntimeError(f"Failed to initialize LLM client: {e}") from e
@@ -279,10 +352,10 @@ def setup(data_path: Path,
     try:
         embedding_model = create_embedding_model(
             provider=embedding_provider_name,
-            api_key=embedding_api_key or llm_api_key,
+            api_key=resolved_embedding_api_key,
             model=embedding_model_name,
             base_url=embedding_base_url,
-            cohere_client=cohere_client,
+            cohere_client=embedding_cohere_client,
         )
     except Exception as e:
         raise RuntimeError(f"Failed to initialize embedding model: {e}") from e
@@ -301,16 +374,25 @@ def setup(data_path: Path,
             chunking_strategy=chunking_strategy,
             reranker=reranker,
             observability_max_events=observability_max_events,
+            max_context_tokens=max_context_tokens,
             chromadb_sqlite_path=chromadb_sqlite_path,
             chromadb_collection_name=chromadb_collection_name
         )
     else:
         try:
             embedding_dim = infer_embedding_dimension(embedding_model)
+        except ModelNotFoundError:
+            # A wrong model name is a configuration error, not a transient probe failure.
+            raise
         except Exception as exc:
-            # Preserve legacy fallback behavior when probe-time inference fails.
-            logger.warning("Falling back to legacy embedding dimension 4096: %s", exc)
-            embedding_dim = 4096
+            raise EmbeddingProbeError(
+                f"Could not determine the embedding dimension: the probe embedding from the "
+                f"'{embedding_provider_name}' embedding provider failed "
+                f"({type(exc).__name__}: {provider_error_message(exc)}). "
+                "Check embedding_provider, embedding_model_name, the embedding API key and network access; "
+                "if the error was transient, call setup() again.",
+                cause=exc,
+            ) from exc
         try:
             vector_db = build_vector_backend(embedding_dim=embedding_dim)
         except Exception as e:
@@ -324,6 +406,7 @@ def setup(data_path: Path,
             chunking_strategy=chunking_strategy,
             reranker=reranker,
             observability_max_events=observability_max_events,
+            max_context_tokens=max_context_tokens,
             file_name=file_name
         )
 

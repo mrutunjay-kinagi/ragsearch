@@ -1,5 +1,7 @@
 # Dataset Analytics Cookbook
 
+> **Note (0.2.0):** this cookbook predates the 0.2.0 fixes, and a rewrite is tracked in [#112](https://github.com/mrutunjay-kinagi/ragsearch/issues/112). Its example questions ("gluten-free pasta dishes with under 30 minutes prep", "budget-friendly family dinners") are filters and aggregates over table columns, which plain retrieval can't answer reliably. Numeric columns such as prep time aren't indexed yet ([#78](https://github.com/mrutunjay-kinagi/ragsearch/issues/78)), and aggregation via SQL is planned ([ADR-0009](./adr/ADR-0009-structured-aggregation-readonly-sql.md)). The PDF and benchmark snippets are illustrative: they need your own file and a `.benchmarks/` history from separate runner scripts. For a tested walkthrough, start with the [Quickstart](./quickstart.md).
+
 Complete end-to-end workflow for RAG-powered dataset analysis, from setup through evaluation.
 
 ## Overview
@@ -35,8 +37,6 @@ print(df.columns.tolist())
 from ragsearch import setup
 
 # Setup with Cohere embeddings (default)
-# Note: the default Cohere setup currently fails because Cohere retired its fallback
-# models; use another provider until https://github.com/mrutunjay-kinagi/ragsearch/issues/82 is fixed.
 engine = setup(
     data_path=Path("recipes.csv"),
     llm_api_key="your-cohere-api-key",
@@ -136,8 +136,7 @@ If your data includes unstructured files (HTML, PDF, DOCX, TXT):
 from ragsearch import setup
 from pathlib import Path
 
-# Parser fallback chain: LiteParse -> fallback parsers
-# LiteParse used if available; fallback used otherwise
+# PDF, DOCX and HTML are parsed by the built-in parsers (pypdf, python-docx, beautifulsoup4)
 engine = setup(
     data_path=Path("path/to/your/report.pdf"),
     llm_api_key="your-cohere-api-key",

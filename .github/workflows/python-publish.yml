@@ -1,41 +1,111 @@
 name: Upload Python Package
 
+# Publishes only from a GitHub Release (#107); there is no manual trigger.
+# - A pre-release whose version is a release candidate (X.Y.Z{a,b,rc}N) goes to TestPyPI.
+# - A normal release with a final version (X.Y.Z) goes to PyPI.
+# The release tag must be "v" + the version in pyproject.toml, and the tagged commit must be on
+# master (finals) or on develop/master (candidates); otherwise nothing is built or published.
+# Uses API tokens for now (repository secrets PYPI_API_TOKEN and TEST_PYPI_API_TOKEN);
+# Trusted Publishing is #110.
+
 on:
   release:
     types: [published]
-  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # The version that generated poetry.lock (same as ci.yml).
+  POETRY_VERSION: "1.8.3"
+
 jobs:
-  deploy:
-
+  build:
+    name: Check release, test and build
     runs-on: ubuntu-latest
-
+    outputs:
+      target: ${{ steps.release.outputs.target }}
     steps:
-    - uses: actions/checkout@v4
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install poetry
-        poetry install
-    - name: Run tests
-      run: poetry run pytest
-    # - name: Lint code
-    #   run: poetry run pylint ragsearch
-    - name: Generate documentation
-      run: |
-        poetry run sphinx-apidoc -o docs/source libs/ragsearch
-        poetry run sphinx-build -b html docs/ docs/build
-    - name: Build package
-      run: poetry build
-    - name: Publish package
-      uses: pypa/gh-action-pypi-publish@27b31702a0e7fc50959f5ad993c78deac1bdfc29
-      with:
-        user: __token__
-        password: ${{ secrets.PYPI_API_TOKEN }}
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Check the tag, the pyproject version and the pre-release flag
+        id: release
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+          PRERELEASE: ${{ github.event.release.prerelease }}
+        run: python .github/ci/check_release.py --tag "$TAG" --prerelease "$PRERELEASE"
+      - name: Check the tagged commit is on an allowed branch
+        env:
+          TARGET: ${{ steps.release.outputs.target }}
+        run: |
+          if [ "$TARGET" = "pypi" ]; then allowed="master"; else allowed="develop master"; fi
+          for branch in $allowed; do
+            if git merge-base --is-ancestor "$GITHUB_SHA" "origin/$branch"; then
+              echo "Tagged commit $GITHUB_SHA is on $branch"; exit 0
+            fi
+          done
+          echo "Tagged commit $GITHUB_SHA is not on: $allowed. Refusing to publish."; exit 1
+      - name: Install Poetry
+        run: pipx install "poetry==${POETRY_VERSION}"
+      - name: Install dependencies
+        run: |
+          poetry env use "${{ steps.python.outputs.python-path }}"
+          poetry install --no-interaction
+      - name: Run tests
+        run: poetry run pytest
+      - name: Generate documentation
+        run: |
+          poetry run sphinx-apidoc -o docs/source libs/ragsearch
+          poetry run sphinx-build -b html docs/ docs/build
+      - name: Build package
+        run: poetry build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  publish-testpypi:
+    name: Publish to TestPyPI
+    needs: build
+    if: needs.build.outputs.target == 'testpypi'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist
+      - name: Publish package to TestPyPI
+        # pypa/gh-action-pypi-publish v1.14.2 (the commit, not the annotated tag object; checked by
+        # .github/ci/check_action_pins.py in CI)
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: build
+    if: needs.build.outputs.target == 'pypi'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist
+      - name: Publish package to PyPI
+        # pypa/gh-action-pypi-publish v1.14.2 (the commit, not the annotated tag object; checked by
+        # .github/ci/check_action_pins.py in CI)
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
