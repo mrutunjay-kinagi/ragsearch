@@ -97,3 +97,16 @@ def test_changelog_has_a_section_for_the_release_being_prepared():
     assert re.search(rf"^## \[{re.escape(final)}\]", changelog, re.MULTILINE), f"CHANGELOG.md has no '## [{final}]' section"
     unreleased = changelog.split("## [Unreleased]", 1)[1].split("\n## [", 1)[0]
     assert not re.search(r"^### ", unreleased, re.MULTILINE), "entries should move from Unreleased into the release section"
+
+
+def test_final_release_has_a_dated_changelog_and_no_prerelease_install_notes():
+    version = _poetry_value("version")
+    if not re.fullmatch(r"\d+\.\d+\.\d+", version):
+        return  # candidates (X.Y.Z{a,b,rc}N) may still point at unreleased code
+    changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert re.search(rf"^## \[{re.escape(version)}\] - \d{{4}}-\d{{2}}-\d{{2}}$", changelog, re.MULTILINE), (
+        f"CHANGELOG.md needs a dated '## [{version}] - YYYY-MM-DD' heading for a final release"
+    )
+    for doc in ("README.md", "docs/quickstart.md"):
+        text = (REPO_ROOT / doc).read_text(encoding="utf-8")
+        assert "Until the next release" not in text and "@develop" not in text, f"{doc} still says to install from GitHub"

@@ -42,9 +42,6 @@ Requires Python 3.10 or newer.
 pip install ragsearch
 ```
 
-> The fixes described in this README are newer than the latest PyPI release (0.1.5). Until the next release, install from GitHub:
-> `pip install "git+https://github.com/mrutunjay-kinagi/ragsearch@develop"`
-
 All dependencies are installed automatically, including the document parsers for PDF (pypdf), DOCX (python-docx) and HTML (beautifulsoup4). Node.js is not needed.
 
 > **LiteParse is not supported yet.** LlamaIndex's LiteParse (npm `@llamaindex/liteparse`) has a different command-line interface from the one ragsearch was written for, so ragsearch does not use it automatically. Proper support (including OCR for scanned PDFs) is planned in [#102](https://github.com/mrutunjay-kinagi/ragsearch/issues/102).

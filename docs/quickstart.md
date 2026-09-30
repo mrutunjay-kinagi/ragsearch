@@ -27,9 +27,6 @@ export COHERE_API_KEY="your-cohere-api-key"
 pip install ragsearch
 ```
 
-> This quickstart needs fixes that are newer than the latest PyPI release (0.1.5). Until the next release, install from GitHub:
-> `pip install "git+https://github.com/mrutunjay-kinagi/ragsearch@develop"`
-
 ## Step 2: Run the quickstart script
 
 Save this as `quickstart.py` in an empty folder. It writes the sample data to `insurance_claims.csv` (the same file ships in the repository as [`samples/quickstart/insurance_claims.csv`](https://github.com/mrutunjay-kinagi/ragsearch/blob/master/samples/quickstart/insurance_claims.csv)), indexes it, and answers a question.
@@ -109,7 +106,7 @@ The first run also creates an `embeddings/` folder: a cache that lets later runs
 - Export your key first: `export COHERE_API_KEY="your-cohere-api-key"`.
 
 **`TypeError: 'module' object is not callable`**
-- You have ragsearch 0.1.5 from PyPI. Install from GitHub as shown in Step 1.
+- You have ragsearch 0.1.x. Upgrade: `pip install --upgrade ragsearch` (this quickstart needs 0.2.0 or newer).
 
 **`ModelNotFoundError`**
 - The configured model name is unknown to your provider or has been retired. The message says which parameter to change; see [troubleshooting](./troubleshooting.md).
