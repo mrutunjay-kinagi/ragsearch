@@ -6,7 +6,7 @@ maintainer tags, publishes or changes repository settings.** Publishing is done 
 
 | GitHub Release | Version in `pyproject.toml` | Tag | Target commit | Publishes to |
 |---|---|---|---|---|
-| **pre-release** | candidate, e.g. `0.2.0rc1` | `v0.2.0rc1` | on `develop` (or `master`) | TestPyPI |
+| **pre-release** | candidate, e.g. `0.2.0rc2` | `v0.2.0rc2` | on `develop` (or `master`) | TestPyPI |
 | normal release | final, e.g. `0.2.0` | `v0.2.0` | on `master` | PyPI |
 
 The workflow refuses to build if the tag isn't `v` + the `pyproject.toml` version, if the pre-release
@@ -17,16 +17,16 @@ use the GitHub CLI (`gh`) and assume `REPO=mrutunjay-kinagi/ragsearch`.
 
 - [ ] Every 0.2.0 issue except #109 is closed: `gh issue list --repo "$REPO" --milestone 0.2.0 --state open`
 - [ ] CI is green on `develop`: `gh run list --repo "$REPO" --branch develop --workflow ci.yml --limit 1`
-- [ ] The version-bump PR (`0.2.0rc1`, CHANGELOG `0.2.0` section) is merged into `develop`.
+- [ ] The version-bump PR (`0.2.0rc2`, CHANGELOG `0.2.0` section) is merged into `develop`.
 - [ ] Repository secrets `PYPI_API_TOKEN` and `TEST_PYPI_API_TOKEN` exist:
       `gh api repos/$REPO/actions/secrets --jq '.secrets[].name'`
 
-## 2. Publish `0.2.0rc1` to TestPyPI (rehearsal)
+## 2. Publish `0.2.0rc2` to TestPyPI (rehearsal)
 
 ```bash
 REPO=mrutunjay-kinagi/ragsearch
-gh release create v0.2.0rc1 --repo "$REPO" --target develop --prerelease \
-  --title "ragsearch 0.2.0rc1" \
+gh release create v0.2.0rc2 --repo "$REPO" --target develop --prerelease \
+  --title "ragsearch 0.2.0rc2" \
   --notes "Release candidate for 0.2.0, published to TestPyPI for a rehearsal. Not for production use."
 
 # Follow the publish run: "Check release, test and build" and "Publish to TestPyPI" must pass;
@@ -46,9 +46,9 @@ quietly install 0.1.5 from PyPI.
 ```bash
 python3.12 -m venv ~/ragsearch-rc && source ~/ragsearch-rc/bin/activate
 python -m pip install --upgrade pip
-python -m pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ "ragsearch==0.2.0rc1"
+python -m pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ "ragsearch==0.2.0rc2"
 
-python -c "import importlib.metadata as m, ragsearch; print(m.version('ragsearch'), ragsearch.__file__)"  # 0.2.0rc1, site-packages
+python -c "import importlib.metadata as m, ragsearch; print(m.version('ragsearch'), ragsearch.__file__)"  # 0.2.0rc2, site-packages
 python -m pip show chromadb   # must report "Package(s) not found" (chromadb is an optional extra)
 ```
 
@@ -56,8 +56,8 @@ Safer alternative (avoids resolving dependency names against TestPyPI, where any
 same-named package): install only ragsearch from TestPyPI, then its dependencies from PyPI.
 
 ```bash
-python -m pip install --index-url https://test.pypi.org/simple/ --no-deps "ragsearch==0.2.0rc1"
-python -m pip install "ragsearch==0.2.0rc1"   # already installed; resolves its dependencies from PyPI
+python -m pip install --index-url https://test.pypi.org/simple/ --no-deps "ragsearch==0.2.0rc2"
+python -m pip install "ragsearch==0.2.0rc2"   # already installed; resolves its dependencies from PyPI
 ```
 
 ## 4. Check the candidate with the real API
@@ -67,13 +67,13 @@ export COHERE_API_KEY="your-cohere-api-key"
 
 # Quickstart, exactly as documented (in an empty folder):
 mkdir -p ~/ragsearch-rc-quickstart && cd ~/ragsearch-rc-quickstart
-curl -sL https://raw.githubusercontent.com/mrutunjay-kinagi/ragsearch/v0.2.0rc1/docs/quickstart.md \
+curl -sL https://raw.githubusercontent.com/mrutunjay-kinagi/ragsearch/v0.2.0rc2/docs/quickstart.md \
   | python -c "import re,sys; print(re.findall(r'^\`\`\`python[^\n]*\n(.*?)^\`\`\`', sys.stdin.read(), re.S | re.M)[0])" > quickstart.py
 python quickstart.py   # "Indexed 8 claims." and a cited answer about the windshield claim
 
 # Every README example, in order, against the installed package (run from a clone of the tag,
 # so the sample files exist; the script refuses to run against repository code):
-git clone --depth 1 --branch v0.2.0rc1 https://github.com/mrutunjay-kinagi/ragsearch.git ~/ragsearch-rc-src
+git clone --depth 1 --branch v0.2.0rc2 https://github.com/mrutunjay-kinagi/ragsearch.git ~/ragsearch-rc-src
 cd ~/ragsearch-rc-src && python .github/ci/run_readme_examples.py
 # Optional: OPENAI_API_KEY=... / RUN_OLLAMA=1 / RUN_LMSTUDIO=1 enable the other provider examples.
 ```
@@ -89,7 +89,7 @@ cd ~/ragsearch-rc-src && python .github/ci/run_readme_examples.py
 - [ ] **Swap the TestPyPI token for a project-scoped one:** on TestPyPI, create an API token scoped
       to the `ragsearch` project, then `gh secret set TEST_PYPI_API_TOKEN --repo "$REPO"` (paste it),
       and delete the account-scoped token in the TestPyPI account settings.
-- [ ] Final version PR on `develop` (prepared by Claude Code): `0.2.0rc1` → `0.2.0`; the CHANGELOG
+- [ ] Final version PR on `develop` (prepared by Claude Code): `0.2.0rc2` → `0.2.0`; the CHANGELOG
       `0.2.0` heading gets the release date; remove the "newer than the latest PyPI release … install
       from GitHub" notes from the README and quickstart.
 - [ ] Release PR from `develop` into `master` (opened by Claude Code), with CI green.

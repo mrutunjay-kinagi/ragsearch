@@ -8,7 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
-## [0.2.0] - release date to be set at release (candidate 0.2.0rc1 on TestPyPI)
+## [0.2.0] - release date to be set at release (candidate 0.2.0rc2 on TestPyPI)
 
 "It works": `pip install ragsearch` in a fresh environment and the README examples run, including on
 multi-page PDFs. Highlights: working default Cohere models; `from ragsearch import setup` returns
@@ -112,7 +112,8 @@ Python 3.10–3.14; chromadb optional; CI on every pull request.
   tagged commit must be on `master`, or on `develop`/`master` for candidates. Pre-releases with
   candidate versions (`X.Y.Z{a,b,rc}N`) publish to TestPyPI; final versions publish to PyPI.
   Poetry is pinned to 1.8.3, and `pypa/gh-action-pypi-publish` moves from v1.4.2 to v1.14.2
-  (pinned by commit). ([#128](https://github.com/mrutunjay-kinagi/ragsearch/pull/128), [#107](https://github.com/mrutunjay-kinagi/ragsearch/issues/107))
+  (pinned by commit `dc37677`; 0.2.0rc1 was pinned to the annotated tag object instead and failed to
+  upload, so CI now checks that every SHA-pinned action is a commit, [#133](https://github.com/mrutunjay-kinagi/ragsearch/pull/133)). ([#128](https://github.com/mrutunjay-kinagi/ragsearch/pull/128), [#107](https://github.com/mrutunjay-kinagi/ragsearch/issues/107))
 
 - **`numpy` is now a declared dependency** (ragsearch already imported it): `>=2.2.6,<2.3` on
   Python 3.10 and `>=2.3.3` on Python 3.11+, so every supported Python, including 3.14, gets a numpy
