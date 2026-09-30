@@ -8,7 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
-## [0.2.0] - release date to be set at release (candidate 0.2.0rc2 on TestPyPI)
+## [0.2.0] - 2026-09-30
 
 "It works": `pip install ragsearch` in a fresh environment and the README examples run, including on
 multi-page PDFs. Highlights: working default Cohere models; `from ragsearch import setup` returns
