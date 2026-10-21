@@ -216,7 +216,7 @@ for result in summary['results']:
 2. **Source accuracy** depends on embedding model; always verify manually
 3. **Benchmark artifacts** in `.benchmarks/` are produced by the benchmark runner scripts, not by search calls
 4. **ChromaDB mode:** `search()` and `answer()` currently fail when `use_chromadb=True`; use the default FAISS backend ([#76](https://github.com/mrutunjay-kinagi/ragsearch/issues/76))
-5. **Numeric columns** in CSV/JSON/Parquet are not included in the indexed text ([#78](https://github.com/mrutunjay-kinagi/ragsearch/issues/78))
+5. **Structured numeric aggregation:** numeric columns in CSV/JSON/Parquet are included as `column: value` pairs in the indexed text ([#78](https://github.com/mrutunjay-kinagi/ragsearch/issues/78)); full structured-data query aggregation via read-only SQL is planned ([ADR-0009](./adr/ADR-0009-structured-aggregation-readonly-sql.md))
 6. **Parsing gaps (built-in parser):** DOCX tables are skipped and scanned PDFs (no text layer) yield no text, since there is no OCR ([#83](https://github.com/mrutunjay-kinagi/ragsearch/issues/83))
 
 ---

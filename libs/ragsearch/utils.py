@@ -18,6 +18,18 @@ def extract_textual_columns(data: pd.DataFrame) -> list:
         logging.error(f"Failed to extract textual columns: {e}")
         raise
 
+def extract_numeric_columns(data: pd.DataFrame) -> list:
+    """
+    Extract columns containing numeric data from a DataFrame.
+    """
+    try:
+        numeric_columns = data.select_dtypes(include=['number']).columns.to_list()
+        logging.info(f"Extracted numeric columns: {numeric_columns}")
+        return numeric_columns
+    except Exception as e:
+        logging.error(f"Failed to extract numeric columns: {e}")
+        raise
+
 def preprocess_search_text(text: str) -> str:
     """
     Preprocess text by stripping whitespace and converting to lowercase.
@@ -29,11 +41,22 @@ def preprocess_search_text(text: str) -> str:
     """
     return text.strip().lower()
 
-def preprocess_text(row, columns):
+def preprocess_text(row, columns, numeric_columns=None):
     """
     Preprocess text data in the specified columns of a DataFrame row.
+
+    Text columns are joined with ' | '. If numeric_columns are provided,
+    they are formatted as 'col: value' pairs and joined.
     """
-    return " | ".join(str(row[col]) if pd.notna(row[col]) else "" for col in columns)
+    parts = [str(row[col]) if pd.notna(row[col]) else "" for col in columns]
+    if numeric_columns:
+        for col in numeric_columns:
+            if col not in columns and pd.notna(row[col]):
+                val = row[col]
+                if isinstance(val, float) and val.is_integer():
+                    val = int(val)
+                parts.append(f"{col}: {val}")
+    return " | ".join(parts)
 
 
 def batch_generate_embeddings(embedding_model, texts: list) -> list:

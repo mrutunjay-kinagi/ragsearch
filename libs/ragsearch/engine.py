@@ -17,6 +17,7 @@ from .llm_clients import LLMClient
 from .chunking import ChunkingStrategy, RowChunkingStrategy, describe_chunking_strategy
 from .reranking import NoOpReranker, Reranker
 from .utils import (extract_textual_columns,
+                    extract_numeric_columns,
                     preprocess_search_text,
                     preprocess_text,
                     insert_embeddings_to_vector_db,
@@ -138,12 +139,13 @@ class RagSearchEngine:
         # Log data summary
         log_data_summary(self.data)
 
-        # Extract textual columns
+        # Extract textual and numeric columns
         textual_columns = extract_textual_columns(data)
+        numeric_columns = extract_numeric_columns(data)
 
         # Build index rows before embedding so chunking strategy can expand records.
         if self.vector_db is not None:
-            self.index_data = self._build_index_data(textual_columns)
+            self.index_data = self._build_index_data(textual_columns, numeric_columns)
 
         # Only process embeddings if using FAISS
         if self.vector_db is not None:
@@ -293,12 +295,13 @@ class RagSearchEngine:
             self.observability_events = self.observability_events[-self.observability_max_events:]
         logging.info("OBSERVABILITY %s", json.dumps(record, sort_keys=True))
 
-    def _build_index_data(self, textual_columns: list) -> pd.DataFrame:
+    def _build_index_data(self, textual_columns: list, numeric_columns: Optional[list] = None) -> pd.DataFrame:
         rows = []
         is_default_chunking = isinstance(self.chunking_strategy, RowChunkingStrategy)
+        numeric_columns = numeric_columns or []
 
         for source_record_id, row in self.data.iterrows():
-            combined_text = preprocess_text(row, textual_columns)
+            combined_text = preprocess_text(row, textual_columns, numeric_columns)
             chunks = self.chunking_strategy.chunk_text(combined_text)
             if not isinstance(chunks, list):
                 raise ValueError("chunking strategy must return a list of text chunks")

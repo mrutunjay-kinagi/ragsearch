@@ -5,6 +5,7 @@ Import checks run in a fresh subprocess: in-process tests are contaminated by
 modules that earlier tests already imported.
 """
 
+import os
 import re
 import subprocess
 import sys
@@ -25,10 +26,13 @@ def _readme_python_blocks():
 
 
 def _run_fresh(code: str, tmp_path: Path) -> subprocess.CompletedProcess:
+    env = {"PYTHONPATH": str(PACKAGE_ROOT), "PATH": ""}
+    if "SYSTEMROOT" in os.environ:
+        env["SYSTEMROOT"] = os.environ["SYSTEMROOT"]
     return subprocess.run(
         [sys.executable, "-W", "ignore", "-c", code],
         cwd=tmp_path,
-        env={"PYTHONPATH": str(PACKAGE_ROOT), "PATH": ""},
+        env=env,
         capture_output=True,
         text=True,
         timeout=120,

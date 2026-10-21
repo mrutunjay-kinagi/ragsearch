@@ -6,6 +6,7 @@ import pytest
 import pandas as pd
 from libs.ragsearch.utils import (
     extract_textual_columns,
+    extract_numeric_columns,
     preprocess_search_text,
     preprocess_text,
     log_data_summary,
@@ -33,6 +34,31 @@ class TestExtractTextualColumns:
     def test_all_text_columns(self):
         df = pd.DataFrame({"a": ["foo"], "b": ["bar"]})
         cols = extract_textual_columns(df)
+        assert set(cols) == {"a", "b"}
+
+
+class TestExtractNumericColumns:
+    def test_returns_numeric_dtype_columns(self):
+        df = pd.DataFrame({"name": ["Alice", "Bob"], "age": [30, 25], "score": [4.5, 3.8], "city": ["NY", "LA"]})
+        cols = extract_numeric_columns(df)
+        assert "age" in cols
+        assert "score" in cols
+        assert "name" not in cols
+        assert "city" not in cols
+
+    def test_empty_dataframe_returns_empty_list(self):
+        df = pd.DataFrame()
+        cols = extract_numeric_columns(df)
+        assert cols == []
+
+    def test_no_numeric_columns_returns_empty_list(self):
+        df = pd.DataFrame({"name": ["Alice"], "city": ["NY"]})
+        cols = extract_numeric_columns(df)
+        assert cols == []
+
+    def test_all_numeric_columns(self):
+        df = pd.DataFrame({"a": [1, 2], "b": [3.14, 2.71]})
+        cols = extract_numeric_columns(df)
         assert set(cols) == {"a", "b"}
 
 
@@ -74,6 +100,26 @@ class TestPreprocessText:
         df = pd.DataFrame({"a": [42], "b": [3.14]})
         result = preprocess_text(df.iloc[0], ["a", "b"])
         assert "42" in result and "3.14" in result
+
+    def test_formats_numeric_columns_as_column_value_pairs(self):
+        row = pd.Series({"name": "Alice", "city": "NY", "age": 30, "salary": 50000})
+        result = preprocess_text(row, ["name", "city"], ["age", "salary"])
+        assert result == "Alice | NY | age: 30 | salary: 50000"
+
+    def test_handles_nan_in_numeric_columns(self):
+        row = pd.Series({"name": "Alice", "age": 30, "salary": float("nan")})
+        result = preprocess_text(row, ["name"], ["age", "salary"])
+        assert result == "Alice | age: 30"
+
+    def test_purely_numeric_columns(self):
+        row = pd.Series({"age": 30, "score": 9.5})
+        result = preprocess_text(row, [], ["age", "score"])
+        assert result == "age: 30 | score: 9.5"
+
+    def test_numeric_column_already_in_columns_not_duplicated(self):
+        row = pd.Series({"a": 42})
+        result = preprocess_text(row, ["a"], ["a"])
+        assert result == "42"
 
 
 class TestLogDataSummary:

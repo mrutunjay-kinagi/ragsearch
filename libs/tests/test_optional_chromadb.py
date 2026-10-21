@@ -48,16 +48,21 @@ def csv_path(tmp_path):
 
 
 def test_importing_ragsearch_does_not_import_chromadb(tmp_path):
+    import os
+
     code = (
         "import sys\n"
         "import ragsearch, ragsearch.setup, ragsearch.engine, ragsearch.vector_db\n"
         "from ragsearch import setup, RagSearchEngine\n"
         "assert 'chromadb' not in sys.modules, 'chromadb was imported eagerly'\n"
     )
+    env = {"PYTHONPATH": str(REPO_ROOT / "libs"), "PATH": "", "OPENBLAS_NUM_THREADS": "1"}
+    if "SYSTEMROOT" in os.environ:
+        env["SYSTEMROOT"] = os.environ["SYSTEMROOT"]
     result = subprocess.run(
         [sys.executable, "-W", "ignore", "-c", code],
         cwd=tmp_path,
-        env={"PYTHONPATH": str(REPO_ROOT / "libs"), "PATH": ""},
+        env=env,
         capture_output=True,
         text=True,
         timeout=120,
