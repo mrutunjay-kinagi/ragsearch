@@ -112,6 +112,7 @@ class TestVectorDBSearch:
 
 def test_importing_the_package_does_not_configure_the_root_logger(tmp_path):
     # A fresh interpreter: in-process, earlier tests may already have configured logging.
+    import os
     import subprocess
     import sys
     from pathlib import Path
@@ -125,10 +126,13 @@ def test_importing_the_package_does_not_configure_the_root_logger(tmp_path):
         "assert root.level == logging.WARNING, root.level\n"
         "assert logging.getLogger('ragsearch.vector_db').handlers == []\n"
     )
+    env = {"PYTHONPATH": str(package_root), "PATH": ""}
+    if "SYSTEMROOT" in os.environ:
+        env["SYSTEMROOT"] = os.environ["SYSTEMROOT"]
     result = subprocess.run(
         [sys.executable, "-W", "ignore", "-c", code],
         cwd=tmp_path,
-        env={"PYTHONPATH": str(package_root), "PATH": ""},
+        env=env,
         capture_output=True,
         text=True,
         timeout=120,

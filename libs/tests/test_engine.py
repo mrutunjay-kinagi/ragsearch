@@ -679,3 +679,57 @@ def test_cache_reused_when_model_and_dimension_unchanged(tmp_path, caplog):
     assert engine.indexing_diagnostics["reused_records"] == 2
     assert engine.indexing_diagnostics["cache_invalidated_reason"] == ""
     assert not [record for record in caplog.records if "re-embedding" in record.getMessage()]
+
+
+def test_numeric_columns_included_in_combined_text(tmp_path):
+    data = pd.DataFrame(
+        [
+            {"name": "Alice", "city": "NY", "age": 30, "salary": 50000},
+            {"name": "Bob", "city": "LA", "age": 25, "salary": 60000},
+        ]
+    )
+    engine = RagSearchEngine(
+        data=data,
+        embedding_model=DummyEmbeddingModel(),
+        llm_client=DummyLLMClient(),
+        vector_db=VectorDB(embedding_dim=4),
+        save_dir=str(tmp_path / "embeddings"),
+    )
+    combined = engine.index_data["combined_text"].tolist()
+    assert combined[0] == "Alice | NY | age: 30 | salary: 50000"
+    assert combined[1] == "Bob | LA | age: 25 | salary: 60000"
+
+
+def test_purely_numeric_dataset_indexed(tmp_path):
+    data = pd.DataFrame(
+        [
+            {"x": 1, "y": 10},
+            {"x": 2, "y": 20},
+        ]
+    )
+    engine = RagSearchEngine(
+        data=data,
+        embedding_model=DummyEmbeddingModel(),
+        llm_client=DummyLLMClient(),
+        vector_db=VectorDB(embedding_dim=4),
+        save_dir=str(tmp_path / "embeddings"),
+    )
+    assert len(engine.index_data) == 2
+    assert engine.index_data["combined_text"].iloc[0] == "x: 1 | y: 10"
+    results = engine.search("x: 1", top_k=1)
+    assert len(results) == 1
+
+
+def test_numeric_column_change_triggers_reembed(tmp_path):
+    model = NamedEmbeddingModel("embed-v4.0", 4)
+    df1 = pd.DataFrame([{"name": "Alice", "amount": 100}])
+    engine1 = _cache_engine(model, 4, tmp_path, df1)
+    assert engine1.indexing_diagnostics["embedded_records"] == 1
+
+    # Second run with different amount -> changed_records == 1, re-embedded
+    model2 = NamedEmbeddingModel("embed-v4.0", 4)
+    df2 = pd.DataFrame([{"name": "Alice", "amount": 150}])
+    engine2 = _cache_engine(model2, 4, tmp_path, df2)
+    assert engine2.indexing_diagnostics["embedded_records"] == 1
+    assert engine2.indexing_diagnostics["changed_records"] == 1
+    assert engine2.indexing_diagnostics["reused_records"] == 0

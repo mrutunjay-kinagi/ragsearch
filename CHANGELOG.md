@@ -8,6 +8,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Fixed
+
+- **Numeric columns are included in structured `combined_text`.** `utils.extract_textual_columns` only
+  extracted `object` dtype columns, omitting numeric fields (counts, ages, amounts, ratings) from
+  indexing and embeddings. Numeric columns are now extracted via `extract_numeric_columns` and
+  formatted as `col: value` pairs in `combined_text` for CSV, JSON, and Parquet files. Because
+  `combined_text` is included in the content hash, records with numeric fields are automatically
+  re-indexed on upgrade. ([#78](https://github.com/mrutunjay-kinagi/ragsearch/issues/78))
+- **Test suite subprocess compatibility on Windows.** Subprocess tests now preserve `SYSTEMROOT`
+  and set `OPENBLAS_NUM_THREADS="1"` so Winsock DLLs and OpenBLAS initialize properly under clean
+  subprocess environments on Windows.
+
 ## [0.2.0] - 2026-09-30
 
 "It works": `pip install ragsearch` in a fresh environment and the README examples run, including on
